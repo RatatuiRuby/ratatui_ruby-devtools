@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Kerrick Long <me@kerricklong.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+version = 1
+
+[[annotations]]
+path = 'Gemfile.lock'
+SPDX-FileCopyrightText = "2026 Kerrick Long <me@kerricklong.com>"
+SPDX-License-Identifier = "CC0-1.0"
+
+# Template files contain ERB that generates SPDX headers for consumer gems.
+# The templates themselves are AGPL-3.0-or-later, while the generated output
+# will have the appropriate license for the consumer gem.
+[[annotations]]
+path = 'lib/ratatui_ruby/devtools/templates/**/*.erb'
+SPDX-FileCopyrightText = "2026 Kerrick Long <me@kerricklong.com>"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+

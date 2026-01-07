@@ -1,0 +1,18 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+#--
+<%# REUSE-IgnoreStart -%>
+# SPDX-FileCopyrightText: <%= Time.now.year %> <%= copyright_holder %>
+# SPDX-License-Identifier: <%= license %>
+<%# REUSE-IgnoreEnd -%>
+#++
+
+require "bundler/setup"
+require "<%= gem_name.tr("-", "/") %>"
+
+# You can add fixtures and/or initialization code here to make experimenting
+# with your gem easier. You can also use a different console, if you like.
+
+require "irb"
+IRB.start(__FILE__)

@@ -1,0 +1,32 @@
+# frozen_string_literal: true
+
+#--
+# SPDX-FileCopyrightText: <%= Time.now.year %> <%= copyright_holder %>
+# REUSE-IgnoreStart
+# SPDX-License-Identifier: <%= license %>
+# REUSE-IgnoreEnd
+#++
+
+source "https://rubygems.org"
+
+gemspec
+
+gem "irb"
+gem "rake", "~> 13.0"
+
+gem "minitest", "~> 5.16"
+
+gem "rubocop", "~> 1.21"
+gem "rubycritic", "~> 4.11"
+gem "inch", "~> 0.4"
+gem "flog", "4.8.0"
+
+gem "nokogiri" # For RDoc sidebar post-processing
+gem "faker"    # For realistic example data
+
+group :development do
+  gem "ratatui_ruby-devtools"
+<%- if has_rust -%>
+  gem "rake-compiler"
+<%- end -%>
+end

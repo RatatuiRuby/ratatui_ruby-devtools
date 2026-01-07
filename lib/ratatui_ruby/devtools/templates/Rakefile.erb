@@ -1,0 +1,29 @@
+# frozen_string_literal: true
+
+#--
+# SPDX-FileCopyrightText: <%= Time.now.year %> <%= copyright_holder %>
+# REUSE-IgnoreStart
+# SPDX-License-Identifier: <%= license %>
+# REUSE-IgnoreEnd
+#++
+
+require "bundler/gem_tasks"
+require "ratatui_ruby/devtools"
+
+RatatuiRuby::Devtools.install!
+
+# Import project-specific tasks
+Dir.glob("tasks/*.rake").each { |r| import r }
+<%- if has_rust -%>
+
+require "rake/extensiontask"
+
+Rake::ExtensionTask.new("<%= gem_name.tr('-', '_') %>") do |ext|
+  ext.lib_dir = "lib/<%= gem_name.tr('-', '/') %>"
+end
+
+task default: %w[compile lint:fix test lint reuse]
+<%- else -%>
+
+task default: %w[lint:fix test lint reuse]
+<%- end -%>

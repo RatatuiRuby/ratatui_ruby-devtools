@@ -1,0 +1,670 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+#--
+# SPDX-FileCopyrightText: 2025 Kerrick Long <me@kerricklong.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#++
+
+####
+# ======================================================================
+# hbs - watch SourceHut builds for current commit
+# ======================================================================
+#
+# SYNOPSIS
+#     bin/hbs [-N|--no-wait] [-b|--builds N] [-y|--yes] [-S|--no-say]
+#
+# DESCRIPTION
+#     Check SourceHut builds for the current HEAD commit and wait for
+#     them to complete. Announces result via macOS text-to-speech.
+#
+#     Fetches from origin first. If HEAD has not been pushed, prompts
+#     to watch latest builds anyway (or auto-confirms with -y). Watches
+#     builds until complete, then reports pass/fail with clear visual
+#     output. Exit 0 only if all builds for HEAD passed.
+#
+#     This makes it reliable for chaining: bin/hbs && rake release
+#
+# OPTIONS
+#     -N, --no-wait      Exit 1 immediately if no builds exist for HEAD.
+#     -b, --builds N     Number of builds to watch (default: count of
+#                        .yml files in .builds/ directory).
+#     -y, --yes          Auto-confirm all prompts (non-interactive).
+#     -S, --no-say       Disable text-to-speech announcements.
+#
+# EXIT STATUS
+#     0                  All builds for HEAD passed
+#     1                  Build failed, no builds found, or HEAD not pushed
+#
+# EXAMPLES
+#     Wait for builds and release if they pass:
+#     bin/hbs && bundle exec rake release
+#
+#     Non-interactive (auto-confirm prompts):
+#     bin/hbs -y
+#
+#     Quick check without waiting:
+#     bin/hbs -N
+#
+# DEPENDENCIES
+#     hut                SourceHut CLI (https://sr.ht/~xenrox/hut/)
+#     git                To get current HEAD commit
+#     say                macOS text-to-speech
+#
+# ======================================================================
+
+require "optparse"
+require "open3"
+require "rdoc"
+
+# Represents a git commit for build lookups.
+#
+# SourceHut builds are identified by commit SHA. Determining whether HEAD is
+# pushed and how far ahead we are requires git commands. This class wraps
+# those queries.
+#
+# [short_sha] The 7-character short SHA.
+Commit = Data.define(:short_sha) do
+  # Returns the current HEAD commit.
+  def self.head
+    sha = `git rev-parse --short HEAD 2>/dev/null`.strip
+    raise "Not in a git repository" if sha.empty?
+
+    new(short_sha: sha)
+  end
+
+  # Returns the origin/trunk HEAD commit, or nil if not available.
+  def self.origin_head
+    sha = `git rev-parse --short origin/trunk 2>/dev/null`.strip
+    return nil if sha.empty?
+
+    new(short_sha: sha)
+  end
+
+  # Checks whether this commit exists on the remote.
+  #
+  # Watching builds for unpushed commits wastes time. The remote hasn't run
+  # CI for code it hasn't received. Check this before querying SourceHut.
+  def pushed?
+    system("git", "merge-base", "--is-ancestor", short_sha, "origin/trunk",
+      out: File::NULL, err: File::NULL)
+  end
+
+  # Counts commits between local HEAD and origin.
+  #
+  # Users need to know how far ahead they are. A large number suggests pushing
+  # before watching builds. Use this to inform the user about sync status.
+  def commits_ahead
+    `git rev-list --count origin/trunk..HEAD 2>/dev/null`.strip.to_i
+  end
+end
+
+# Represents a single SourceHut build job.
+#
+# Build jobs have IDs, statuses, and output logs. Querying status, fetching
+# output, and refreshing require hut CLI calls. This class wraps those.
+#
+# [id] The numeric build ID.
+# [status] The current status string (RUNNING, SUCCESS, FAILED, etc.)
+Build = Data.define(:id, :status) do
+  # Indicates whether the build is still in progress.
+  #
+  # Completed builds have final results. Running builds need polling. Check
+  # this to determine whether to wait or report.
+  def running?
+    %w[RUNNING PENDING QUEUED].include?(status)
+  end
+
+  # Indicates whether the build failed.
+  #
+  # A failed build blocks releases. Success requires all builds to pass. Check
+  # this to gate release actions.
+  def failed?
+    status == "FAILED"
+  end
+
+  # Generates the SourceHut web URL for this build.
+  #
+  # Users need direct links to investigate failures or review logs. Use this
+  # to create clickable references in output.
+  def url
+    "https://builds.sr.ht/~kerrick/job/#{id}"
+  end
+
+  # Fetches the full build output from SourceHut.
+  #
+  # Debugging failures requires log access. The hut CLI retrieves logs. Use
+  # this to display build details or extract specific information.
+  def output
+    out, = Open3.capture2("hut", "builds", "show", id.to_s)
+    out
+  end
+
+  # Extracts displayable log lines from build output.
+  #
+  # Build output includes headers. Display needs just the log content. Use
+  # this when showing logs in a formatted UI.
+  def content_lines
+    # Skip the URL line (first line) since it becomes the title
+    output.lines.drop(1).map(&:rstrip)
+  end
+
+  # Extracts the most recent timestamp from the build log.
+  #
+  # Long-running builds need progress indication. The latest timestamp shows
+  # recency. Use this to label build sections or detect stalled jobs.
+  def last_timestamp
+    # Extract the latest timestamp from the runtime log (format: YYYY/MM/DD HH:MM:SS)
+    timestamps = output.scan(%r{\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}})
+    timestamps.last
+  end
+
+  # Queries SourceHut for the current build status.
+  #
+  # Build status changes over time. Stale data misleads users. Call this
+  # periodically to get fresh status and detect completion.
+  def refresh
+    out, = Open3.capture2("hut", "builds", "show", id.to_s)
+    new_status = out.lines.first(3).join.match(/RUNNING|SUCCESS|FAILED|PENDING|QUEUED/)&.[](0) || status
+    Build.new(id:, status: new_status)
+  end
+end
+
+# A collection of SourceHut builds.
+#
+# Watching builds requires finding them by commit, checking statuses, and
+# refreshing as a group. Individual Build objects lack this context.
+#
+# This class manages collections. It queries builds by commit or status.
+# It refreshes all builds together. It reports aggregate status.
+#
+# [builds] Array of Build objects.
+BuildSet = Data.define(:builds) do
+  # Finds builds for a specific commit.
+  #
+  # [commit] A Commit object to search for.
+  def self.for_commit(commit)
+    output, = Open3.capture2("hut", "builds", "list")
+    ids = output.lines
+      .each_cons(6)
+      .select { |chunk| chunk.any? { |l| l.include?(commit.short_sha) } }
+      .filter_map { |chunk| chunk.first[/#(\d+)/, 1]&.to_i }
+      .uniq
+
+    builds = ids.map { |id| Build.new(id:, status: fetch_status(id)) }
+    new(builds:)
+  end
+
+  # Finds currently running builds.
+  def self.running
+    output, = Open3.capture2("hut", "builds", "list")
+    ids = output.lines
+      .select { |l| l.match?(/RUNNING|PENDING|QUEUED/) }
+      .filter_map { |l| l[/#(\d+)/, 1]&.to_i }
+      .uniq
+
+    builds = ids.map { |id| Build.new(id:, status: fetch_status(id)) }
+    new(builds:)
+  end
+
+  # Finds the most recent builds.
+  #
+  # [count] Number of builds to return.
+  def self.latest(count = 4)
+    output, = Open3.capture2("hut", "builds", "list")
+    ids = output.lines
+      .filter_map { |l| l[/#(\d+)/, 1]&.to_i }
+      .uniq
+      .first(count)
+
+    builds = ids.map { |id| Build.new(id:, status: fetch_status(id)) }
+    new(builds:)
+  end
+
+  # Finds builds with a specific status.
+  #
+  # [target_status] The status to search for (FAILED, SUCCESS).
+  # [count] Number of builds per set.
+  def self.with_status(target_status, count = 4)
+    output, = Open3.capture2("hut", "builds", "list")
+    all_ids = output.lines
+      .filter_map { |l| l[/#(\d+)/, 1]&.to_i }
+      .uniq
+
+    # Group builds into sets of `count` and find the first set with any matching status
+    all_ids.each_slice(count) do |set_ids|
+      builds = set_ids.map { |id| Build.new(id:, status: fetch_status(id)) }
+      has_match = case target_status
+                  when "FAILED" then builds.any?(&:failed?)
+                  when "SUCCESS" then builds.none?(&:failed?)
+      end
+      return new(builds:) if has_match
+    end
+
+    new(builds: [])
+  end
+
+  # Queries the status of a specific build by ID.
+  #
+  # Build creation returns only the ID. Status requires a separate query. Use
+  # this when constructing Build objects from ID lists.
+  #
+  # [id] The build ID.
+  def self.fetch_status(id)
+    output, = Open3.capture2("hut", "builds", "show", id.to_s)
+    output.lines.first(3).join.match(/RUNNING|SUCCESS|FAILED|PENDING|QUEUED/)&.[](0) || "UNKNOWN"
+  end
+
+  # Indicates whether the collection has no builds.
+  #
+  # A missing commit has no builds. Watching nothing wastes time. Check this
+  # to abort early or prompt the user about missing CI.
+  def empty?
+    builds.empty?
+  end
+
+  # Indicates whether any build is still in progress.
+  #
+  # Completed builds have final results. Running builds need polling. Check
+  # this to determine whether to wait or report.
+  def any_running?
+    builds.any?(&:running?)
+  end
+
+  # Indicates whether any build failed.
+  #
+  # A failed build blocks releases. Success requires all builds to pass. Check
+  # this to gate release actions.
+  def any_failed?
+    builds.any?(&:failed?)
+  end
+
+  # Extracts the commit SHA from build output.
+  #
+  # Builds track which commit they ran. Displaying the SHA confirms the correct
+  # code was tested. Use this to show the user what was verified.
+  def commit_sha
+    # Extract commit SHA from the first build's output - this is the canonical source
+    return nil if builds.empty?
+
+    sha_match = builds.first.output.match(/\[([a-f0-9]{7})\]\[0\]/)
+    sha_match&.[](1)
+  end
+
+  # Queries SourceHut for fresh status of all builds.
+  #
+  # Build status changes over time. Watching requires periodic updates. Call
+  # this in a loop to poll until all builds complete.
+  def refresh
+    BuildSet.new(builds: builds.map(&:refresh))
+  end
+
+  # Collects the build IDs for display.
+  #
+  # Users need to identify which builds are being watched. IDs enable lookup
+  # and linking. Use this when showing build references.
+  def ids
+    builds.map(&:id)
+  end
+end
+
+# Watches SourceHut builds and reports results.
+#
+# CI builds run asynchronously. Developers need to know when they finish and
+# whether they passed. Polling manually is tedious. Parsing output is error-prone.
+#
+# This class watches builds. It polls until complete. It announces results via
+# macOS text-to-speech. It displays formatted output with clear pass/fail status.
+#
+# Use it to wait for CI before releasing.
+class BuildWatch
+  # Seconds between status polls.
+  POLL_INTERVAL = 30
+
+  # Seconds to wait for builds to appear.
+  WAIT_INTERVAL = 5
+
+  # Maximum attempts to find builds before giving up.
+  MAX_WAIT_ATTEMPTS = 6
+
+  # Creates a new BuildWatch.
+  #
+  # [wait_for_builds] Whether to wait for builds to appear.
+  # [build_count] Number of builds to expect.
+  # [auto_yes] Whether to auto-confirm prompts.
+  # [no_say] Whether to disable text-to-speech.
+  def initialize(wait_for_builds: true, build_count: 4, auto_yes: false, no_say: false)
+    @wait_for_builds = wait_for_builds
+    @build_count = build_count
+    @auto_yes = auto_yes
+    @no_say = no_say
+  end
+
+  private def box(*lines, style: :info, title: nil)
+    width = 78
+    inner_width = width - 4 # "║ " + content + " ║"
+
+    color = case style
+            when :success then "\e[32m"
+            when :error then "\e[31m"
+            else "\e[36m"
+    end
+    reset = "\e[0m"
+
+    top_border = if title
+      title_text = " #{title} "
+      left_pad = (width - 2 - title_text.length) / 2
+      right_pad = width - 2 - title_text.length - left_pad
+      "#{color}╔#{'═' * left_pad}#{title_text}#{'═' * right_pad}╗#{reset}"
+    else
+      "#{color}╔#{'═' * (width - 2)}╗#{reset}"
+    end
+    bottom_border = "#{color}╚#{'═' * (width - 2)}╝#{reset}"
+
+    puts top_border
+    lines.each do |line|
+      wrap_text(line, inner_width).each do |wrapped|
+        puts "#{color}║ #{wrapped.ljust(inner_width)} ║#{reset}"
+      end
+    end
+    puts bottom_border
+  end
+
+  private def single_box(*lines, title: nil)
+    width = 78
+    inner_width = width - 4 # "│ " + content + " │"
+
+    gray = "\e[90m"
+    reset = "\e[0m"
+
+    top_border = if title
+      title_text = " #{title} "
+      left_pad = (width - 2 - title_text.length) / 2
+      right_pad = width - 2 - title_text.length - left_pad
+      "#{gray}┌#{'─' * left_pad}#{title_text}#{'─' * right_pad}┐#{reset}"
+    else
+      "#{gray}┌#{'─' * (width - 2)}┐#{reset}"
+    end
+    bottom_border = "#{gray}└#{'─' * (width - 2)}┘#{reset}"
+
+    puts top_border
+    lines.each do |line|
+      wrap_text(line, inner_width).each do |wrapped|
+        if wrapped.length > inner_width
+          # Line is too long even after wrapping (e.g., a URL that can't be broken).
+          # Let it "blow out" the right wall rather than truncating or wrapping mid-word.
+          puts "#{gray}│#{reset} #{wrapped}"
+        else
+          puts "#{gray}│#{reset} #{wrapped.ljust(inner_width)} #{gray}│#{reset}"
+        end
+      end
+    end
+    puts bottom_border
+  end
+
+  private def result_box(message, style:, sha: nil)
+    width = 78
+    inner_width = width - 4
+    symbol = (style == :success) ? "✓" : "✗"
+    flanks = "#{symbol} #{symbol} #{symbol}"
+
+    # Include commit SHA if provided
+    full_message = sha ? "#{message} (#{sha})" : message
+
+    # Calculate padding: inner_width - 2*flanks - message - spaces around message
+    available = inner_width - (flanks.length * 2) - full_message.length
+    left_pad = available / 2
+    right_pad = available - left_pad
+
+    centered = "#{flanks}#{' ' * left_pad}#{full_message}#{' ' * right_pad}#{flanks}"
+    box(centered, style:)
+  end
+
+  private def wrap_text(text, width)
+    return [text] if text.length <= width
+
+    # Use RDoc::Text#wrap which handles URLs better
+    wrapper = Object.new.extend(RDoc::Text)
+    wrapper.wrap(text, width).lines.map(&:chomp)
+  end
+
+  private def show_builds(build_set)
+    if build_set.any_failed?
+      # Announce failure immediately - don't wait for all build details to be fetched
+      say("Builds have Failed")
+
+      # Failed builds: raw output with red full-block separators
+      red = "\e[31m"
+      reset = "\e[0m"
+      block_line = "#{red}#{'█' * 80}#{reset}"
+
+      build_set.builds.each_with_index do |build, idx|
+        if idx.positive?
+          # Show separator with build info for easy scanning
+          next_build = build_set.builds[idx]
+          ts = next_build.last_timestamp
+          label = ts ? "##{next_build.id} — #{ts} — #{next_build.status}" : "##{next_build.id} — #{next_build.status}"
+          # Down-arrows indicate this labels the NEXT build below; inset by 1 to avoid edge rendering issues
+          centered = " ↓#{label.center(76)}↓ "
+
+          puts
+          puts block_line
+          puts "#{red}#{centered}#{reset}"
+          puts block_line
+          puts
+        end
+        system("hut", "builds", "show", build.id.to_s)
+      end
+    else
+      # Normal builds: gray single-boxes with URL titles
+      build_set.builds.each do |build|
+        single_box(*build.content_lines, title: build.url)
+      end
+    end
+  end
+
+  # Starts the build watching TUI.
+  #
+  # Users invoke hbs to monitor CI. This method checks prerequisites, resolves
+  # target commit, queries builds, and polls until completion. It reports
+  # results with terminal notifications.
+  def run
+    check_dependencies!
+
+    # Debug mode: find builds by status instead of commit
+    if (force_status = ENV["HBS_FORCE"])
+      target = case force_status.upcase
+               when "PASSED" then "SUCCESS"
+               when "FAILED" then "FAILED"
+               else
+                 warn "HBS_FORCE must be 'PASSED' or 'FAILED'"
+                 exit 1
+      end
+
+      box("HBS_FORCE=#{force_status}: Finding #{@build_count} #{target} builds...")
+      build_set = BuildSet.with_status(target, @build_count)
+      if build_set.empty?
+        box("No #{target} builds found", style: :error)
+        exit 1
+      end
+      box("Found builds: #{build_set.ids.join(', ')}")
+      report(build_set)
+      return
+    end
+
+    commit = Commit.head
+    system("git", "fetch", "--quiet", out: File::NULL, err: File::NULL)
+    origin = Commit.origin_head
+
+    unless commit.pushed?
+      return handle_unpushed(commit, origin)
+    end
+
+    box("Looking for builds for commit #{commit.short_sha}...")
+
+    build_set = find_builds(commit)
+    if build_set.empty?
+      puts
+      say("No builds found")
+      box("✗✗✗ NO BUILDS FOUND ✗✗✗", "Commit: #{commit.short_sha}", style: :error)
+      exit 1
+    end
+
+    box("Found builds: #{build_set.ids.join(', ')}")
+    watch(build_set) if build_set.any_running?
+    report(build_set.refresh)
+  end
+
+  private def check_dependencies!
+    %w[hut say].each do |cmd|
+      unless system("command", "-v", cmd, out: File::NULL, err: File::NULL)
+        warn "Error: '#{cmd}' not found."
+        exit 1
+      end
+    end
+  end
+
+  private def find_builds(commit)
+    attempts = 0
+    loop do
+      build_set = BuildSet.for_commit(commit)
+      return build_set unless build_set.empty?
+      return build_set unless @wait_for_builds
+
+      attempts += 1
+      if attempts >= MAX_WAIT_ATTEMPTS
+        return build_set
+      end
+
+      puts "No builds found, waiting... (#{attempts}/#{MAX_WAIT_ATTEMPTS})"
+      sleep WAIT_INTERVAL
+    end
+  end
+
+  private def handle_unpushed(commit, origin)
+    ahead = commit.commits_ahead
+    origin_sha = origin&.short_sha || "unknown"
+
+    box(
+      "Your branch is ahead of 'origin' by #{ahead} commit#{'s' if ahead != 1}.",
+      "  Local HEAD:  #{commit.short_sha}",
+      "  Origin HEAD: #{origin_sha}"
+    )
+
+    unless @auto_yes
+      print "Watch latest SourceHut builds anyway? [Y/n] "
+      reply = $stdin.gets&.strip || ""
+      if reply.downcase.start_with?("n")
+        puts
+        say("Exiting")
+        box("✗✗✗ EXITING (BUILDS NOT VERIFIED) ✗✗✗", style: :error)
+        exit 1
+      end
+    end
+
+    build_set = BuildSet.latest(@build_count)
+    if build_set.empty?
+      puts
+      say("No builds found")
+      box("✗✗✗ NO BUILDS ON SOURCEHUT ✗✗✗", style: :error)
+      exit 1
+    end
+
+    box("Latest builds: #{build_set.ids.join(', ')}")
+    watch(build_set) if build_set.any_running?
+
+    final_set = build_set.refresh
+    show_builds(final_set)
+    puts
+
+    sha = final_set.commit_sha
+    if final_set.any_failed?
+      # say() already called in show_builds when failure first detected
+      result_box("BUILDS FAILED", style: :error, sha:)
+    else
+      say("Builds have Passed")
+      result_box("BUILDS PASSED", style: :success, sha:)
+    end
+
+    # Recheck if HEAD is now pushed (user may have pushed while watching)
+    current_head = Commit.head
+    if current_head.pushed?
+      box("HEAD #{current_head.short_sha} is now pushed. Re-run to verify.")
+    else
+      box("HEAD #{current_head.short_sha} still not pushed.")
+    end
+    exit 1
+  end
+
+  private def watch(build_set)
+    say("Watching Builds")
+    show_builds(build_set)
+
+    current = build_set
+    while current.any_running?
+      sleep POLL_INTERVAL
+      current = current.refresh
+      show_builds(current)
+    end
+  end
+
+  private def report(build_set)
+    puts
+    show_builds(build_set)
+    puts
+
+    # Extract commit SHA from build output - this is the canonical source
+    sha = build_set.commit_sha
+
+    if build_set.any_failed?
+      # say() already called in show_builds when failure first detected
+      result_box("BUILDS FAILED", style: :error, sha:)
+      exit 1
+    else
+      say("Builds have Passed")
+      result_box("BUILDS PASSED", style: :success, sha:)
+      exit 0
+    end
+  end
+
+  private def say(message)
+    return if @no_say
+
+    # Fire async so script doesn't block waiting for speech
+    pid = spawn("say", message, out: File::NULL, err: File::NULL)
+    Process.detach(pid)
+  end
+end
+
+# Parse options
+default_build_count = Dir.glob(".builds/*.yml").size
+default_build_count = 4 if default_build_count.zero?
+
+options = { wait_for_builds: true, build_count: default_build_count, auto_yes: false, no_say: false }
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: bin/hbs [OPTIONS]"
+
+  opts.on("-N", "--no-wait", "Don't wait for builds to appear") do
+    options[:wait_for_builds] = false
+  end
+
+  opts.on("-b", "--builds N", Integer, "Number of builds to watch (default: #{default_build_count})") do |n|
+    options[:build_count] = n
+  end
+
+  opts.on("-y", "--yes", "Auto-confirm all prompts") do
+    options[:auto_yes] = true
+  end
+
+  opts.on("-S", "--no-say", "Disable text-to-speech") do
+    options[:no_say] = true
+  end
+
+  opts.on("-h", "--help", "Show this help") do
+    puts opts
+    exit
+  end
+end.parse!
+
+BuildWatch.new(**options).run

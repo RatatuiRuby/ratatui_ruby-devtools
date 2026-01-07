@@ -1,0 +1,662 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+#--
+# SPDX-FileCopyrightText: 2026 Kerrick Long <me@kerricklong.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#++
+
+# Scaffolds a new RatatuiRuby ecosystem gem.
+#
+# Creating a new ecosystem gem requires many files with consistent formatting:
+# gemspec, Rakefile, AGENTS.md, CI configs, license headers, and more.
+# Manually copying and editing templates is tedious and error-prone.
+#
+# This script renders all devtools templates into a new gem directory with
+# the correct gem name, copyright holder, and license. Run it to bootstrap
+# a new ecosystem gem with all quality gates pre-configured.
+#
+# == Usage
+#
+#   scaffold GEM_NAME [OPTIONS]
+#
+# == Options
+#
+#   --author NAME     Copyright holder name (default: from git config)
+#   --email EMAIL     Copyright holder email (default: from git config)
+#   --license ID      SPDX license identifier (default: AGPL-3.0-or-later)
+#   --dir PATH        Parent directory for new gem (default: current directory)
+#   --help            Show this help
+#
+# == Examples
+#
+#   scaffold ratatui_ruby-tea
+#   scaffold ratatui_ruby-kit --license MIT
+#   scaffold ratatui_ruby-framework --dir ~/Developer
+
+require "erb"
+require "fileutils"
+require "optparse"
+
+# Configuration for scaffold generation.
+#
+# Holds all parameters needed to render templates. Auto-discovers author info
+# from git config if not provided.
+class ScaffoldConfig
+  # The gem name to scaffold.
+  attr_accessor :gem_name
+
+  # The copyright holder's name.
+  attr_accessor :author
+
+  # The copyright holder's email.
+  attr_accessor :email
+
+  # The SPDX license identifier.
+  attr_accessor :license
+
+  # The output directory path.
+  attr_accessor :output_dir
+
+  # Whether this gem includes a Rust native extension.
+  attr_accessor :has_rust
+
+  # Creates a new config with defaults from git.
+  #
+  # Reads author name and email from git config. Sets default license to
+  # LGPL-3.0-or-later. Override any accessor after creation.
+  def initialize
+    @license = "LGPL-3.0-or-later"
+    @author = `git config user.name`.strip
+    @email = `git config user.email`.strip
+    @has_rust = false
+  end
+
+  # The gem name with underscores (for module names).
+  def module_name
+    gem_name.split("-").map { |s| s.split("_").map(&:capitalize).join }.join("::")
+  end
+
+  # The gem name with slashes (for require paths).
+  def require_path
+    gem_name.tr("-", "/")
+  end
+
+  # Copyright holder string for SPDX headers.
+  def copyright_holder
+    "#{author} <#{email}>"
+  end
+
+  # Current year for copyright.
+  def year
+    Time.now.year
+  end
+
+  # Ruby versions to test in CI.
+  def ruby_versions
+    %w[3.2 3.3 3.4 4.0.0]
+  end
+end
+
+# Renders ERB templates into the target directory.
+#
+# Templates use ERB to inject gem-specific values. This class handles the
+# rendering and file creation with proper directory structure.
+class TemplateRenderer
+  # Creates a new renderer with config and paths.
+  #
+  # [config] The ScaffoldConfig with gem parameters.
+  # [templates_dir] Path to the ERB templates.
+  # [output_dir] Path where rendered files are written.
+  def initialize(config, templates_dir, output_dir)
+    @config = config
+    @templates_dir = templates_dir
+    @output_dir = output_dir
+  end
+
+  # Renders all templates into the output directory.
+  def render_all
+    FileUtils.mkdir_p(@output_dir)
+
+    render_template(".gitignore.erb", ".gitignore")
+    render_template(".pre-commit-config.yaml.erb", ".pre-commit-config.yaml")
+    render_template(".rubocop.yml.erb", ".rubocop.yml")
+    render_template("AGENTS.md.erb", "AGENTS.md")
+    render_template("CHANGELOG.md.erb", "CHANGELOG.md")
+    render_template("Gemfile.erb", "Gemfile")
+    render_template("README.md.erb", "README.md")
+    render_template("REUSE.toml.erb", "REUSE.toml")
+    render_template("Rakefile.erb", "Rakefile")
+    render_template("gemspec.erb", "#{@config.gem_name}.gemspec")
+    render_template("mise.toml.erb", "mise.toml")
+
+    # bin/ scripts
+    render_template("bin/setup.erb", "bin/setup", executable: true)
+    render_template("bin/console.erb", "bin/console", executable: true)
+
+    # task resources for CI manifest generation
+    copy_task_resources
+
+    # vendor files (RuboCop base config)
+    copy_vendor_files
+
+    # doc files (RDoc styling)
+    copy_doc_files
+
+    # lib/ structure
+    create_lib_structure
+
+    # Rust extension (if enabled)
+    create_rust_extension if @config.has_rust
+
+    puts "Scaffolded #{@config.gem_name} in #{@output_dir}"
+  end
+
+  private def render_template(template_name, output_name, executable: false)
+    template_path = File.join(@templates_dir, template_name)
+    output_path = File.join(@output_dir, output_name)
+
+    FileUtils.mkdir_p(File.dirname(output_path))
+
+    if File.exist?(template_path)
+      if template_name.end_with?(".erb")
+        content = ERB.new(File.read(template_path), trim_mode: "-").result(binding_for_config)
+      else
+        content = File.read(template_path)
+      end
+      File.write(output_path, content)
+      FileUtils.chmod(0o755, output_path) if executable
+      puts "  Created #{output_name}"
+    else
+      warn "  WARNING: Template not found: #{template_name}"
+    end
+  end
+
+  private def copy_task_resources
+    resources_dir = File.join(@output_dir, "tasks", "resources")
+    tasks_dir = File.join(@output_dir, "tasks")
+    FileUtils.mkdir_p(resources_dir)
+
+    # Copy task resource files
+    template_resources = File.join(@templates_dir, "tasks", "resources")
+    # Render ERB templates to tasks/resources/
+    render_template("tasks/resources/build.yml.erb", "tasks/resources/build.yml.erb")
+    render_template("tasks/resources/rubies.yml.erb", "tasks/resources/rubies.yml")
+    render_template("tasks/resources/index.html.erb", "tasks/resources/index.html.erb")
+
+    # Render example_viewer.html.erb to tasks/
+    render_template("tasks/example_viewer.html.erb", "tasks/example_viewer.html.erb")
+
+    # Create exe/.gitkeep
+    exe_dir = File.join(@output_dir, "exe")
+    FileUtils.mkdir_p(exe_dir)
+    gitkeep = File.join(exe_dir, ".gitkeep")
+    FileUtils.touch(gitkeep)
+    puts "  Created exe/.gitkeep"
+  end
+
+  private def copy_vendor_files
+    vendor_dir = File.join(@output_dir, "vendor", "goodcop")
+    FileUtils.mkdir_p(vendor_dir)
+
+    src = File.join(@templates_dir, "vendor", "goodcop", "base.yml")
+    dst = File.join(vendor_dir, "base.yml")
+    if File.exist?(src)
+      FileUtils.cp(src, dst)
+      puts "  Copied vendor/goodcop/base.yml"
+    else
+      warn "  WARNING: vendor/goodcop/base.yml not found"
+    end
+  end
+
+  private def copy_doc_files
+    doc_dir = File.join(@output_dir, "doc")
+    FileUtils.mkdir_p(doc_dir)
+    FileUtils.mkdir_p(File.join(doc_dir, "getting_started"))
+    FileUtils.mkdir_p(File.join(doc_dir, "concepts"))
+    FileUtils.mkdir_p(File.join(doc_dir, "images"))
+
+    # Render custom.css (now an ERB template)
+    render_template("doc/custom.css.erb", "doc/custom.css")
+
+    # Create images/.gitkeep
+    FileUtils.touch(File.join(doc_dir, "images", ".gitkeep"))
+    puts "  Created doc/images/.gitkeep"
+
+    # Render doc templates
+    render_template("doc/index.md.erb", "doc/index.md")
+    render_template("doc/getting_started/quickstart.md.erb", "doc/getting_started/quickstart.md")
+    render_template("doc/concepts/application_architecture.md.erb", "doc/concepts/application_architecture.md")
+    render_template("doc/concepts/application_testing.md.erb", "doc/concepts/application_testing.md")
+  end
+
+  private def create_lib_structure
+    lib_path = File.join(@output_dir, "lib", @config.require_path)
+    FileUtils.mkdir_p(lib_path)
+
+    # Split the module name into parts for proper nesting
+    module_parts = @config.module_name.split("::")
+
+    # Main require file
+    main_file = File.join(@output_dir, "lib", "#{@config.require_path}.rb")
+    # REUSE-IgnoreStart
+    File.write(main_file, <<~RUBY)
+      # frozen_string_literal: true
+
+      #--
+      # SPDX-FileCopyrightText: #{@config.year} #{@config.copyright_holder}
+      # SPDX-License-Identifier: #{@config.license}
+      #++
+
+      require_relative "#{@config.gem_name.split('-').last}/version"
+
+      # Entry point for the #{@config.gem_name} gem.
+      #
+      # Ruby libraries benefit from a clear namespace. Gems need a central module.
+      #
+      # This module serves as the namespace root. All classes and utilities live here.
+      #
+      # Require this file to load the library.
+      #{generate_nested_module(module_parts, '# Namespace for library functionality.')}
+    RUBY
+    # REUSE-IgnoreEnd
+    puts "  Created lib/#{@config.require_path}.rb"
+
+    # Version file
+    version_file = File.join(lib_path, "version.rb")
+    # REUSE-IgnoreStart
+    File.write(version_file, <<~RUBY)
+      # frozen_string_literal: true
+
+      #--
+      # SPDX-FileCopyrightText: #{@config.year} #{@config.copyright_holder}
+      # SPDX-License-Identifier: #{@config.license}
+      #++
+
+      #{generate_nested_module_with_version(module_parts)}
+    RUBY
+    # REUSE-IgnoreEnd
+    puts "  Created lib/#{@config.require_path}/version.rb"
+
+    # Test directory with placeholder
+    test_path = File.join(@output_dir, "test")
+    FileUtils.mkdir_p(test_path)
+    # REUSE-IgnoreStart
+    File.write(File.join(test_path, "test_helper.rb"), <<~RUBY)
+      # frozen_string_literal: true
+
+      #--
+      # SPDX-FileCopyrightText: #{@config.year} #{@config.copyright_holder}
+      # SPDX-License-Identifier: #{@config.license}
+      #++
+
+      $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+      require "#{@config.require_path}"
+      require "minitest/autorun"
+    RUBY
+    # REUSE-IgnoreEnd
+    puts "  Created test/test_helper.rb"
+  end
+
+  private def create_rust_extension
+    ext_name = @config.gem_name.tr("-", "_")
+    ext_path = File.join(@output_dir, "ext", ext_name)
+    cargo_path = File.join(ext_path, ".cargo")
+    FileUtils.mkdir_p(cargo_path)
+
+    # Cargo.toml
+    # REUSE-IgnoreStart
+    File.write(File.join(ext_path, "Cargo.toml"), <<~TOML)
+      # SPDX-FileCopyrightText: #{@config.year} #{@config.copyright_holder}
+      # SPDX-License-Identifier: #{@config.license}
+
+      [package]
+      name = "#{ext_name}"
+      version = "0.1.0"
+      edition = "2021"
+
+      [lib]
+      crate-type = ["cdylib", "staticlib"]
+
+      [dependencies]
+      magnus = "0.8"
+      ratatui = { version = "0.30", features = ["widget-calendar", "layout-cache", "unstable-rendered-line-info"] }
+
+      # Optional: Arena allocation to avoid Box::leak for long-lived Ruby objects
+      # bumpalo = "3.16"
+      # lazy_static = "1.4"
+    TOML
+    # REUSE-IgnoreEnd
+    puts "  Created ext/#{ext_name}/Cargo.toml"
+
+    # extconf.rb
+    # REUSE-IgnoreStart
+    File.write(File.join(ext_path, "extconf.rb"), <<~RUBY)
+      # frozen_string_literal: true
+
+      #--
+      # SPDX-FileCopyrightText: #{@config.year} #{@config.copyright_holder}
+      # SPDX-License-Identifier: #{@config.license}
+      #++
+
+      require "mkmf"
+      require "rb_sys/mkmf"
+
+      create_rust_makefile("#{ext_name}/#{ext_name}") do |r|
+        # Optional: Force release profile if needed
+        # r.profile = ENV.fetch("RB_SYS_CARGO_PROFILE", :release).to_sym
+
+        # Force static linking on musl to avoid "cdylib" issues
+        if RbConfig::CONFIG["target_os"].include?("linux-musl") || RbConfig::CONFIG["host_os"].include?("linux-musl")
+          r.extra_rustc_args = ["--crate-type", "staticlib"]
+        else
+          r.extra_rustc_args = ["--crate-type", "cdylib"]
+        end
+      end
+    RUBY
+    # REUSE-IgnoreEnd
+    puts "  Created ext/#{ext_name}/extconf.rb"
+
+    # .cargo/config.toml
+    # REUSE-IgnoreStart
+    File.write(File.join(cargo_path, "config.toml"), <<~TOML)
+      # SPDX-FileCopyrightText: #{@config.year} #{@config.copyright_holder}
+      # SPDX-License-Identifier: #{@config.license}
+
+      [target.aarch64-apple-darwin]
+      rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+      [target.x86_64-apple-darwin]
+      rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+      # Force dynamic linking on Alpine (musl) to fix "Dynamic loading not supported"
+      # errors when bindgen tries to load libclang.
+      [target.'cfg(target_env = "musl")']
+      rustflags = ["-C", "target-feature=-crt-static"]
+    TOML
+    # REUSE-IgnoreEnd
+    puts "  Created ext/#{ext_name}/.cargo/config.toml"
+
+    # .gitignore
+    # REUSE-IgnoreStart
+    File.write(File.join(ext_path, ".gitignore"), <<~GITIGNORE)
+      # SPDX-FileCopyrightText: #{@config.year} #{@config.copyright_holder}
+      # SPDX-License-Identifier: #{@config.license}
+
+      /target/
+    GITIGNORE
+    # REUSE-IgnoreEnd
+    puts "  Created ext/#{ext_name}/.gitignore"
+
+    # clippy.toml
+    # REUSE-IgnoreStart
+    File.write(File.join(ext_path, "clippy.toml"), <<~TOML)
+      # SPDX-FileCopyrightText: #{@config.year} #{@config.copyright_holder}
+      # SPDX-License-Identifier: #{@config.license}
+
+      disallowed-methods = [
+          { path = "std::boxed::Box::leak", reason = "Use bumpalo arena allocation instead." },
+          { path = "std::vec::Vec::leak", reason = "Use bumpalo arena allocation instead." },
+      ]
+    TOML
+    # REUSE-IgnoreEnd
+    puts "  Created ext/#{ext_name}/clippy.toml"
+
+    # src/lib.rs stub
+    src_path = File.join(ext_path, "src")
+    FileUtils.mkdir_p(src_path)
+    # REUSE-IgnoreStart
+    File.write(File.join(src_path, "lib.rs"), <<~RUST)
+      // SPDX-FileCopyrightText: #{@config.year} #{@config.copyright_holder}
+      // SPDX-License-Identifier: #{@config.license}
+
+      use magnus::{define_module, prelude::*, Error};
+
+      #[magnus::init]
+      fn init() -> Result<(), Error> {
+          let module = define_module("#{@config.module_name.split('::').first}")?;
+          // Add your native methods here
+          Ok(())
+      }
+    RUST
+    # REUSE-IgnoreEnd
+    puts "  Created ext/#{ext_name}/src/lib.rs"
+  end
+
+  private def generate_nested_module(parts, content, indent = 0, is_outermost = true)
+    return content if parts.empty?
+
+    prefix = "  " * indent
+    first, *rest = parts
+    inner = generate_nested_module(rest, content, indent + 1, false)
+    inner_prefix = "  " * (indent + 1)
+
+    if rest.empty?
+      # Innermost module - content is a doc comment that goes BEFORE the module
+      if content.empty?
+        "#{prefix}module #{first}\n#{prefix}end"
+      else
+        "#{prefix}#{content}\n#{prefix}module #{first}\n#{prefix}end"
+      end
+    else
+      # Outer modules get :nodoc: to avoid "missing documentation" warnings
+      # (they're documented in the main require file or the core gem)
+      nodoc = is_outermost ? " # :nodoc: Documented in the ratatui_ruby gem." : ""
+      "#{prefix}module #{first}#{nodoc}\n#{inner}\n#{prefix}end"
+    end
+  end
+
+  private def generate_nested_module_with_error(parts, indent = 0)
+    prefix = "  " * indent
+    if parts.length == 1
+      # Innermost module with documented Error class
+      <<~RUBY.chomp
+        #{prefix}module #{parts.first}
+        #{prefix}  # Base error class for this library.
+        #{prefix}  #
+        #{prefix}  # All library-specific exceptions inherit from this class.
+        #{prefix}  # Catch this to handle any library error generically.
+        #{prefix}  class Error < StandardError; end
+        #{prefix}end
+      RUBY
+    else
+      first, *rest = parts
+      inner = generate_nested_module_with_error(rest, indent + 1)
+      "#{prefix}module #{first}\n#{inner}\n#{prefix}end"
+    end
+  end
+
+  private def generate_nested_module_with_version(parts, indent = 0, is_outermost = true)
+    prefix = "  " * indent
+    if parts.length == 1
+      # Innermost module with documented VERSION constant
+      <<~RUBY.chomp
+        #{prefix}module #{parts.first}
+        #{prefix}  # The version of this gem.
+        #{prefix}  # See https://semver.org/spec/v2.0.0.html
+        #{prefix}  VERSION = "0.1.0"
+        #{prefix}end
+      RUBY
+    else
+      first, *rest = parts
+      inner = generate_nested_module_with_version(rest, indent + 1, false)
+      # Outer modules get :nodoc: to avoid "missing documentation" warnings
+      # (they're documented in the main require file or the core gem)
+      nodoc = is_outermost ? " # :nodoc: Documented in the ratatui_ruby gem." : ""
+      "#{prefix}module #{first}#{nodoc}\n#{inner}\n#{prefix}end"
+    end
+  end
+
+  private def binding_for_config
+    # Create a binding with all config values available to templates
+    b = binding
+    b.local_variable_set(:gem_name, @config.gem_name)
+    b.local_variable_set(:module_name, @config.module_name)
+    b.local_variable_set(:require_path, @config.require_path)
+    b.local_variable_set(:copyright_holder, @config.copyright_holder)
+    b.local_variable_set(:license, @config.license)
+    b.local_variable_set(:author, @config.author)
+    b.local_variable_set(:email, @config.email)
+    b.local_variable_set(:year, @config.year)
+    b.local_variable_set(:has_rdoc, true)
+    b.local_variable_set(:has_rust, @config.has_rust)
+    b.local_variable_set(:dependencies, [])
+    b.local_variable_set(:summary, "Part of the RatatuiRuby ecosystem")
+    b.local_variable_set(:description, "#{@config.module_name} - part of the RatatuiRuby TUI framework ecosystem")
+    b.local_variable_set(:version_file_require, "lib/#{@config.require_path}/version")
+    b.local_variable_set(:version_file, "lib/#{@config.require_path}/version.rb")
+    b
+  end
+end
+
+# Parse command line options
+config = ScaffoldConfig.new
+parent_dir = Dir.pwd
+force = false
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: scaffold GEM_NAME [OPTIONS]"
+
+  opts.on("--author NAME", "Copyright holder name") do |name|
+    config.author = name
+  end
+
+  opts.on("--email EMAIL", "Copyright holder email") do |email|
+    config.email = email
+  end
+
+  opts.on("--license ID", "SPDX license identifier") do |license|
+    config.license = license
+  end
+
+  opts.on("--dir PATH", "Parent directory for new gem") do |dir|
+    parent_dir = File.expand_path(dir)
+  end
+
+  opts.on("-f", "--force", "Remove existing directory if present") do
+    force = true
+  end
+
+  opts.on("--rust", "Include Rust native extension support") do
+    config.has_rust = true
+  end
+
+  opts.on("-h", "--help", "Show this help") do
+    puts opts
+    exit
+  end
+end.parse!
+
+if ARGV.empty?
+  warn "Error: GEM_NAME is required"
+  warn "Usage: scaffold GEM_NAME [OPTIONS]"
+  exit 1
+end
+
+config.gem_name = ARGV[0]
+config.output_dir = File.join(parent_dir, config.gem_name)
+
+if File.exist?(config.output_dir)
+  if force
+    FileUtils.rm_rf(config.output_dir)
+    puts "Removed existing directory: #{config.output_dir}"
+  else
+    warn "Error: Directory already exists: #{config.output_dir}"
+    warn "Use --force to remove it"
+    exit 1
+  end
+end
+
+# Find templates directory
+templates_dir = File.expand_path("../lib/ratatui_ruby/devtools/templates", __dir__)
+unless File.directory?(templates_dir)
+  # Fallback for installed gem
+  spec = Gem.loaded_specs["ratatui_ruby-devtools"]
+  if spec
+    templates_dir = File.join(spec.gem_dir, "lib/ratatui_ruby/devtools/templates")
+  end
+end
+
+unless File.directory?(templates_dir)
+  warn "Error: Could not find templates directory"
+  exit 1
+end
+
+puts "Scaffolding #{config.gem_name}..."
+puts "  Author: #{config.copyright_holder}"
+puts "  License: #{config.license}"
+puts ""
+
+renderer = TemplateRenderer.new(config, templates_dir, config.output_dir)
+renderer.render_all
+
+# Initialize git repo with proper branch structure
+puts ""
+puts "Initializing git repository..."
+Dir.chdir(config.output_dir) do
+  # Initialize git with trunk as the default branch (not main/master)
+  system("git init --quiet --initial-branch=trunk")
+
+  # Add remote origin for SourceHut
+  remote_url = "git@git.sr.ht:~kerrick/#{config.gem_name}"
+  system("git remote add origin #{remote_url}")
+  puts "  Set remote origin: #{remote_url}"
+
+  # Initial add (before setup runs)
+  system("git add -A")
+end
+puts "  Initialized git with trunk branch"
+
+# Run setup (installs gems, pre-commit, downloads licenses, etc.)
+puts ""
+puts "Running bin/setup..."
+Dir.chdir(config.output_dir) do
+  system("mise trust --yes --raw")
+  system("bin/setup")
+end
+
+# Copy LICENSE from primary license for gem distribution
+puts ""
+puts "Setting up LICENSE..."
+Dir.chdir(config.output_dir) do
+  license_file = "LICENSES/#{config.license}.txt"
+  if File.exist?(license_file)
+    FileUtils.cp(license_file, "LICENSE")
+    puts "  Copied #{license_file} to LICENSE"
+  else
+    system("mise x -- reuse download #{config.license}")
+    if File.exist?(license_file)
+      FileUtils.cp(license_file, "LICENSE")
+      puts "  Downloaded and copied #{config.license} to LICENSE"
+    else
+      warn "  WARNING: Could not find or download license: #{config.license}"
+    end
+  end
+end
+
+# Create initial commit and tags
+puts ""
+puts "Creating initial commit and tags..."
+Dir.chdir(config.output_dir) do
+  # Stage ALL files including those created by bin/setup
+  system("git add -A")
+
+  # Commit (don't use --quiet so we see any errors)
+  unless system("git commit -m 'chore: scaffold #{config.gem_name} with ratatui_ruby-devtools'")
+    warn "  WARNING: Initial commit failed, retrying with --allow-empty"
+    system("git commit --allow-empty -m 'chore: scaffold #{config.gem_name} with ratatui_ruby-devtools'")
+  end
+
+  # Create tag and stable branch
+  system("git tag v0.1.0 -m 'Initial scaffold release'")
+  system("git branch stable")
+  puts "  Created branches: trunk (default), stable"
+  puts "  Created tag: v0.1.0"
+end
+
+puts ""
+puts "Done! Your gem is ready at: #{config.output_dir}"
+puts ""
+puts "Next steps:"
+puts "  cd #{config.gem_name}"
+puts "  bundle exec rake"

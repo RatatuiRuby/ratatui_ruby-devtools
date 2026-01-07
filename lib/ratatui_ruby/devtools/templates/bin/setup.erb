@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: <%= Time.now.year %> <%= copyright_holder %>
+# REUSE-IgnoreStart
+# SPDX-License-Identifier: <%= license %>
+# REUSE-IgnoreEnd
+
+set -euo pipefail
+IFS=$'\n\t'
+set -vx
+
+if command -v mise >/dev/null 2>&1; then
+  mise install
+  mise x -- pip install reuse
+  mise x -- bundle install
+  pre-commit install
+  mise x -- reuse download --all
+  bundle exec rake sourcehut
+<%- if has_rdoc -%>
+  bundle exec rake rdoc
+<%- end -%>
+else
+  echo "mise isn't installed. Please install it to continue." >&2
+  exit 1
+fi

@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: <%= Time.now.year %> <%= copyright_holder %>
+# REUSE-IgnoreStart
+# SPDX-License-Identifier: <%= license %>
+# REUSE-IgnoreEnd
+
+[tools]
+ruby = "4.0.0"
+<%- if has_rust -%>
+rust = "1.91.1"
+<%- end -%>
+python = "3.12"
+pre-commit = "latest"

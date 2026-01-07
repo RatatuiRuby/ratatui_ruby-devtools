@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 Kerrick Long <me@kerricklong.com>
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+**/.idea/
+**/.DS_Store
+/.bundle/
+/.yardoc/
+/_yardoc/
+/coverage/
+/pkg/
+/spec/reports/
+/tmp/
+<%- if has_rust -%>
+/ext/<%= gem_name %>/target/
+*.bundle
+*.dylib
+*.so
+<%- end -%>
