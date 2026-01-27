@@ -25,21 +25,22 @@ def load_source_gem_metadata
   raise "No version.rb found in #{SOURCE_GEM_DIR}" if version_files.empty?
 
   version_file = version_files.first
-  load version_file
+  version_content = File.read(version_file)
 
-  # Find the module that defines VERSION
-  # Convention: the namespace matches the gem name
+  # Parse module name and VERSION directly from file content
+  module_match = version_content.match(/^\s*module\s+(\w+(?:::\w+)*)/)
+  raise "No module declaration found in #{version_file}" unless module_match
+
+  version_match = version_content.match(/VERSION\s*=\s*["']([^"']+)["']/)
+  raise "No VERSION found in #{version_file}" unless version_match
+
+  full_version = version_match[1]
+
+  # Get gem_name from gemspec for other metadata
   gemspec_files = Dir.glob(File.join(SOURCE_GEM_DIR, "*.gemspec"))
   raise "No gemspec found in #{SOURCE_GEM_DIR}" if gemspec_files.empty?
 
   gem_name = File.basename(gemspec_files.first, ".gemspec")
-
-  # Convert gem_name to module name (e.g., ratatui_ruby -> RatatuiRuby)
-  module_name = gem_name.split("_").map(&:capitalize).join
-    .split("-").map(&:capitalize).join("::")
-
-  full_version = Object.const_get(module_name)::VERSION
-  raise "Could not load VERSION from #{version_file}" unless full_version
 
   # Compute docs version (major.minor only) using Gem::Version
   segments = Gem::Version.new(full_version).segments
