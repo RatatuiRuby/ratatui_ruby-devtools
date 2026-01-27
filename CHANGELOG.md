@@ -15,9 +15,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Multi-version documentation website builder: `install_website_tasks!` generates
+  documentation portals with version dropdown menus. Discovers versions from git
+  tags, builds RDoc for each in isolation, and creates a landing page with
+  branding support.
+
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.1.0] - 2026-01-08
+
+### Added
+
 - Initial release of `ratatui_ruby-devtools`
 - Rake tasks: `lint`, `lint:fix`, `reuse`, `license`, `bump`
 - Executables: `agent_rake`, `consolidate_md`, `hbs`, `announce`
 - Templates for scaffolding new ecosystem gems
 - Auto-discovery of gem configuration from `*.gemspec`
 - Conditional Cargo/Rust task support for gems with native extensions
+
+### Added
+
+### Changed
+
+### Fixed
+
+### Removed
+
+[Unreleased]: https://git.sr.ht/~kerrick/ratatui_ruby-devtools/refs/HEAD
+[0.1.0]: https://git.sr.ht/~kerrick/ratatui_ruby-devtools/refs/v0.1.0

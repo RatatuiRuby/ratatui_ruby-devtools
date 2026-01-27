@@ -40,19 +40,48 @@ module RatatuiRuby
       # Configuration accessors - auto-discovered if not set
       attr_writer :gem_name, :gemspec_file, :version_file
 
-      # Loads all devtools Rake tasks into the current application.
+      # Loads gem development Rake tasks (test, lint, bump, license, etc.)
       #
-      # Consumer gems need shared tasks for linting, testing, and licensing.
-      # Manually copying rake files is tedious and leads to drift. Call this
-      # once in your Rakefile to import all devtools tasks.
+      # Use this in gem/library Rakefiles. These tasks help with version
+      # management, testing, linting, and releasing gems.
       #
       # === Example
       #
       #   require "ratatui_ruby/devtools"
-      #   RatatuiRuby::Devtools.install!
+      #   RatatuiRuby::Devtools.install_gem_tasks!
       #
-      def install!
-        tasks_dir = File.expand_path("devtools/tasks", __dir__)
+      def install_gem_tasks!
+        load_tasks_from("tasks")
+      end
+
+      # Loads website hosting Rake tasks (build, serve, deploy).
+      #
+      # Use this in website repository Rakefiles. These tasks help sync docs
+      # from a source gem, update HTML metadata, and deploy.
+      #
+      # @param source_gem_dir [String] Path to the source gem directory
+      #   (e.g., "~/Developer/ratatui_ruby")
+      #
+      # === Example
+      #
+      #   require "ratatui_ruby/devtools"
+      #   RatatuiRuby::Devtools.install_website_tasks!(
+      #     source_gem_dir: "~/Developer/ratatui_ruby"
+      #   )
+      #
+      def install_website_tasks!(source_gem_dir:)
+        @source_gem_dir = File.expand_path(source_gem_dir)
+        load_tasks_from("site_tasks")
+      end
+
+      # Returns the source gem directory for website tasks.
+      attr_reader :source_gem_dir
+
+      # Backwards-compatible alias for install_gem_tasks!
+      alias install! install_gem_tasks!
+
+      private def load_tasks_from(subdir)
+        tasks_dir = File.expand_path("devtools/#{subdir}", __dir__)
         Dir.glob("#{tasks_dir}/*.rake").each do |task_file|
           Rake.application.add_import(task_file)
         end

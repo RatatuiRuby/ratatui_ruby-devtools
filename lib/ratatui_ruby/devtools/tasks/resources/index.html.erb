@@ -1,0 +1,129 @@
+<!--
+SPDX-FileCopyrightText: 2026 Kerrick Long <me@kerricklong.com>
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+<%
+  # Branding configuration with sensible defaults
+  logo_small = branding[:logo_small] || "../logo-small.png"
+  wordmark = branding[:wordmark] || project_name
+  tagline = branding[:tagline] || "API documentation and guides"
+  
+  # Navigation links (array of {text:, href:} hashes)
+  nav_links = branding[:nav_links] || []
+  
+  # Footer columns (array of {heading:, links: [{text:, href:, tag:, tag_muted:}]} hashes)
+  footer_columns = branding[:footer_columns] || []
+  
+  # Footer bottom bar
+  footer_meta_links = branding[:footer_meta_links] || []
+  copyright = branding[:copyright] || "© #{Time.now.year}"
+  license_text = branding[:license_text] || ""
+  
+  # CSS/font customization
+  stylesheet = branding[:stylesheet] || "../styles.css"
+  google_fonts_url = branding[:google_fonts_url]
+  
+  # Find latest version for default links
+  latest = versions.find { |v| v.respond_to?(:latest?) && v.latest? }
+  latest_slug = latest&.slug || "trunk"
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title><%= project_name %> documentation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="<%= tagline %> for <%= project_name %>, organized by version.">
+  <link rel="stylesheet" href="<%= stylesheet %>">
+  <% if google_fonts_url %>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="<%= google_fonts_url %>" rel="stylesheet">
+  <% end %>
+</head>
+<body>
+  <header class="header">
+    <div class="header__inner">
+      <a href="/" class="header__brand">
+        <img src="<%= logo_small %>" alt="<%= project_name %> Logo" class="header__logo" width="48" height="48">
+        <span class="header__wordmark"><%= wordmark %></span>
+      </a>
+      <% unless nav_links.empty? %>
+      <nav class="header__nav" aria-label="Primary">
+        <% nav_links.each do |link| %>
+        <a href="<%= link[:href] %>"<%= ' class="header__nav-external"' if link[:external] %>><%= link[:text] %></a>
+        <% end %>
+      </nav>
+      <% end %>
+    </div>
+  </header>
+
+  <main>
+    <section class="section">
+      <div class="section__inner">
+        <header class="section__header">
+          <span class="section__eyebrow">Reference</span>
+          <h1 class="section__title">Documentation</h1>
+          <p class="section__intro"><%= tagline %> for current and past versions of <%= project_name %>.</p>
+        </header>
+
+        <ul class="version-list">
+          <% versions.each do |version| %>
+            <li class="version-list__item<%= ' version-list__item--latest' if version.latest? %>">
+              <a href="<%= version.slug %>/index.html" class="version-list__link">
+                <span class="version-list__name"><%= version.name %></span>
+                <span class="version-list__meta">
+                  <% if version.latest? %>
+                    Latest release via RubyGems
+                  <% elsif version.edge? %>
+                    Pre-release via git
+                  <% else %>
+                    Historical
+                  <% end %>
+                </span>
+              </a>
+            </li>
+          <% end %>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer__inner">
+      <% unless footer_columns.empty? %>
+      <!-- Megafooter columns -->
+      <div class="footer__columns">
+        <% footer_columns.each do |column| %>
+        <div class="footer__column">
+          <h3 class="footer__heading"><%= column[:heading] %></h3>
+          <ul class="footer__list">
+            <% column[:links].each do |link| %>
+            <li><a href="<%= link[:href] %>"><%= link[:text] %><% if link[:tag] %> <span class="footer__tag<%= ' footer__tag--muted' if link[:tag_muted] %>"><%= link[:tag] %></span><% end %></a></li>
+            <% end %>
+          </ul>
+        </div>
+        <% end %>
+      </div>
+      <% end %>
+
+      <!-- Bottom bar -->
+      <div class="footer__bottom">
+        <div class="footer__brand">
+          <img src="<%= logo_small %>" alt="" class="footer__logo" width="32" height="32" aria-hidden="true">
+          <span class="footer__wordmark"><%= wordmark %></span>
+        </div>
+        <% unless footer_meta_links.empty? %>
+        <nav class="footer__meta" aria-label="Meta links">
+          <% footer_meta_links.each do |link| %>
+          <a href="<%= link[:href] %>"><%= link[:text] %></a>
+          <% end %>
+        </nav>
+        <% end %>
+        <p class="footer__copy"><%= copyright %><% if license_text && !license_text.empty? %> · <%= license_text %><% end %></p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
