@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Fixed
+
+### Removed
+
+## [0.1.1] - 2026-01-26
+
+### Added
+
 - Multi-version documentation website builder: `install_website_tasks!` generates
   documentation portals with version dropdown menus. Discovers versions from git
   tags, builds RDoc for each in isolation, and creates a landing page with
@@ -46,4 +56,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 [Unreleased]: https://git.sr.ht/~kerrick/ratatui_ruby-devtools/refs/HEAD
+[0.1.1]: https://git.sr.ht/~kerrick/ratatui_ruby-devtools/refs/v0.1.1
 [0.1.0]: https://git.sr.ht/~kerrick/ratatui_ruby-devtools/refs/v0.1.0
