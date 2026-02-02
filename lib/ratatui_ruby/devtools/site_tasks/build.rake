@@ -65,7 +65,7 @@ def load_source_gem_metadata
 end
 
 def current_source_sha
-  Dir.chdir(SOURCE_GEM_DIR) { `git rev-parse trunk`.strip }
+  Dir.chdir(SOURCE_GEM_DIR) { `git rev-parse origin/trunk`.strip }
 end
 
 def docs_content_hash
