@@ -112,7 +112,7 @@ class Edge < Version
 
   # Git branch name for archive extraction.
   def ref
-    "trunk"
+    "origin/trunk"
   end
 
   # Identifies this as unreleased for "(dev)" labels in menus.
