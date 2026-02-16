@@ -34,7 +34,7 @@ namespace :lint do
   end
 
   # Build dynamic task lists based on what's available
-  docs_tasks = %w[rubycritic reuse:lint]
+  docs_tasks = %w[rubycritic]
   docs_tasks.unshift("autodoc") if Rake::Task.task_defined?("autodoc")
   docs_tasks << "safe_rdoc_coverage" if Rake::Task.task_defined?("rdoc:coverage")
 
@@ -43,8 +43,7 @@ namespace :lint do
 
   task docs: docs_tasks
   task code: code_tasks
-  task licenses: %w[reuse:lint]
-  task all: %w[docs code licenses]
+  task all: %w[docs code]
 
   namespace :fix do
     desc "Auto-fix RuboCop offenses (most aggressive)"
@@ -62,11 +61,8 @@ namespace :lint do
       end
     end
 
-    desc "Add SPDX headers and normalize Ruby file structure"
-    task reuse: %w[reuse:fix reuse:normalize_ruby]
-
     # Build dynamic fix:all task
-    fix_all_tasks = %w[lint:fix:rubocop lint:fix:reuse]
+    fix_all_tasks = %w[lint:fix:rubocop]
     fix_all_tasks.insert(1, "lint:fix:clippy") if Dir.exist?("ext")
 
     desc "Run all auto-fix tasks"
