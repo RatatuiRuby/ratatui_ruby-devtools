@@ -1,0 +1,124 @@
+<%# REUSE-IgnoreStart -%>
+# SPDX-FileCopyrightText: <%= Time.now.year %> <%= copyright_holder %>
+# SPDX-License-Identifier: <%= license %>
+<%# REUSE-IgnoreEnd -%>
+
+name: Build Gems
+
+on:
+  push:
+    branches:
+      - "release/*"
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }}, Ruby ${{ matrix.ruby }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: <%= rubies.map { |r| r.split(".")[0..1].join(".") }.uniq.inspect %>
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      CI: "true"
+      BINDGEN_EXTRA_CLANG_ARGS: "-include stdbool.h"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Override Ruby version in mise.toml
+        shell: bash
+        run: sed -i.bak 's/ruby = .*/ruby = "${{ matrix.ruby }}"/' mise.toml
+
+      - name: Install Ruby via RubyInstaller (Windows)
+        if: runner.os == 'Windows'
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+
+      - name: Configure Windows build environment
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Add-Content -Path .mise.local.toml -Value "[settings]`ndisable_tools = [`"ruby`"]"
+          $msysRoot = (Join-Path $env:RI_DEVKIT "ucrt64") -replace '\\', '/'
+          $clangArgs = "-include stdbool.h --target=x86_64-w64-mingw32 --sysroot=$msysRoot -I$msysRoot/include"
+          Add-Content -Path $env:GITHUB_ENV -Value "BINDGEN_EXTRA_CLANG_ARGS=$clangArgs"
+          Add-Content -Path $env:GITHUB_ENV -Value "CARGO_BUILD_TARGET=x86_64-pc-windows-gnu"
+          rustup target add x86_64-pc-windows-gnu
+
+      - name: Install toolchain via mise
+        uses: jdx/mise-action@v2
+
+      - name: Setup (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bin/setup
+
+      - name: Setup (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: bin/setup.ps1
+
+      - name: Default task
+        run: mise x -- bundle exec rake
+
+      - name: Upload compiled binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.os }}-ruby${{ matrix.ruby }}
+          path: lib/<%= ext_name %>/<%= ext_name %>.*
+          if-no-files-found: error
+
+  package:
+    name: Package (${{ matrix.os }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ruby via RubyInstaller (Windows)
+        if: runner.os == 'Windows'
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Override Ruby version in mise.toml (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: sed -i.bak 's/ruby = .*/ruby = "3.4"/' mise.toml
+
+      - name: Install toolchain via mise (Unix)
+        if: runner.os != 'Windows'
+        uses: jdx/mise-action@v2
+
+      - name: Configure Windows mise (skip Ruby)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Add-Content -Path .mise.local.toml -Value "[settings]`ndisable_tools = [`"ruby`"]"
+
+      - name: Install toolchain via mise (Windows)
+        if: runner.os == 'Windows'
+        uses: jdx/mise-action@v2
+
+<%- rubies.map { |r| r.split(".")[0..1].join(".") }.uniq.each do |minor| -%>
+      - name: Download Ruby <%= minor %> binary
+        uses: actions/download-artifact@v4
+        with:
+          name: native-${{ matrix.os }}-ruby<%= minor %>
+          path: lib/<%= ext_name %>/<%= minor %>
+
+<%- end -%>
+      - name: Build platform gem
+        run: ruby tasks/release/platform_gem.rb
+
+      - name: Upload gem artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gem-${{ matrix.os }}
+          path: pkg/*.gem
+          if-no-files-found: error

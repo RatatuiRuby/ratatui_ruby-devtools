@@ -102,7 +102,7 @@ class ScaffoldConfig
 
   # Ruby versions to test in CI.
   def ruby_versions
-    %w[3.2 3.3 3.4 4.0.0]
+    %w[3.2 3.3 3.4 4.0.1]
   end
 end
 
@@ -148,6 +148,9 @@ class TemplateRenderer
 
     # GitHub Actions CI workflow
     render_template(".github/workflows/ci.yml.erb", ".github/workflows/ci.yml")
+
+    # GitHub Actions build-gems workflow (Rust only)
+    render_template(".github/workflows/build-gems.yml.erb", ".github/workflows/build-gems.yml") if @config.has_rust
 
     # task resources
     copy_task_resources

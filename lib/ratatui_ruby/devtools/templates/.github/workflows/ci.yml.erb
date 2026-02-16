@@ -7,8 +7,10 @@ name: CI
 
 on:
   push:
+<%- if has_rust -%>
     branches-ignore:
       - "release/*"
+<%- end -%>
   pull_request:
 
 jobs:
