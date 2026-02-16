@@ -20,21 +20,16 @@ BUILT_SHA_FILE = File.join(PUBLIC_DOCS_DIR, ".built_sha")
 
 # Shared helper to load version metadata from source gem
 def load_source_gem_metadata
-  # Find the version.rb file dynamically
-  version_files = Dir.glob(File.join(SOURCE_GEM_DIR, "lib/**/version.rb"))
-  raise "No version.rb found in #{SOURCE_GEM_DIR}" if version_files.empty?
-
-  version_file = version_files.first
-  version_content = File.read(version_file)
-
-  # Parse module name and VERSION directly from file content
-  module_match = version_content.match(/^\s*module\s+(\w+(?:::\w+)*)/)
-  raise "No module declaration found in #{version_file}" unless module_match
-
-  version_match = version_content.match(/VERSION\s*=\s*["']([^"']+)["']/)
-  raise "No VERSION found in #{version_file}" unless version_match
-
-  full_version = version_match[1]
+  # Derive full_version from the highest git tag, not version.rb.
+  # Patch releases live on release branches; trunk stays at the
+  # minor baseline (e.g. 1.4.0) until the next minor ships.
+  full_version = Dir.chdir(SOURCE_GEM_DIR) do
+    tags = `git tag`.split.grep(/^v\d/)
+    latest = tags.map { |t| Gem::Version.new(t.sub(/^v/, "")) }
+      .max
+    raise "No version tags found in #{SOURCE_GEM_DIR}" unless latest
+    latest.to_s
+  end
 
   # Get gem_name from gemspec for other metadata
   gemspec_files = Dir.glob(File.join(SOURCE_GEM_DIR, "*.gemspec"))
