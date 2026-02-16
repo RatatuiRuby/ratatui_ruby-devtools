@@ -1,24 +1,34 @@
 #!/usr/bin/env bash
+<%# REUSE-IgnoreStart -%>
 # SPDX-FileCopyrightText: <%= Time.now.year %> <%= copyright_holder %>
-# REUSE-IgnoreStart
 # SPDX-License-Identifier: <%= license %>
-# REUSE-IgnoreEnd
+<%# REUSE-IgnoreEnd -%>
 
 set -euo pipefail
 IFS=$'\n\t'
 set -vx
 
-if command -v mise >/dev/null 2>&1; then
-  mise install
-  mise x -- pip install reuse
-  mise x -- bundle install
+if ! command -v mise >/dev/null 2>&1; then
+  echo "mise isn't installed. Please install it to continue." >&2
+  exit 1
+fi
+
+mise install
+<%- if has_rust -%>
+mise x -- rustup component add rustfmt clippy
+<%- end -%>
+mise x -- pip install reuse
+mise x -- gem install bundler:4.0.3
+
+if [ "${CI:-}" = "true" ]; then
+  bundle config set --local frozen 'true'
+fi
+
+mise x -- bundle install
+
+if [ "${CI:-}" != "true" ]; then
   pre-commit install
-  mise x -- reuse download --all
-  bundle exec rake sourcehut
 <%- if has_rdoc -%>
   bundle exec rake rdoc
 <%- end -%>
-else
-  echo "mise isn't installed. Please install it to continue." >&2
-  exit 1
 fi

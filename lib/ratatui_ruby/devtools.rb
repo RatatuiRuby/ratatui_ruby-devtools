@@ -145,10 +145,10 @@ module RatatuiRuby
 
       private def discover_version_file
         # Convention: lib/gem_name/version.rb (with underscores for namespacing)
-        # e.g., ratatui_ruby-tea -> lib/ratatui_ruby/tea/version.rb
+        # e.g., ratatui_ruby-kit -> lib/ratatui_ruby/kit/version.rb
         parts = gem_name.split("-")
         if parts.size > 1
-          # ratatui_ruby-tea -> ratatui_ruby/tea
+          # ratatui_ruby-kit -> ratatui_ruby/kit
           path = "lib/#{parts.first}/#{parts[1..].join('/')}/version.rb"
         else
           # ratatui_ruby -> ratatui_ruby

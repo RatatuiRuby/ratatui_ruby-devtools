@@ -1,0 +1,19 @@
+# frozen_string_literal: true
+
+#--
+<%# REUSE-IgnoreStart -%>
+# SPDX-FileCopyrightText: <%= year %> <%= copyright_holder %>
+# SPDX-License-Identifier: <%= license %>
+<%# REUSE-IgnoreEnd -%>
+#++
+
+require_relative "<%= gem_name.split('-').last %>/version"
+
+# Entry point for the <%= gem_name %> gem.
+#
+# Ruby libraries benefit from a clear namespace. Gems need a central module.
+#
+# This module serves as the namespace root. All classes and utilities live here.
+#
+# Require this file to load the library.
+<%= nested_module %>

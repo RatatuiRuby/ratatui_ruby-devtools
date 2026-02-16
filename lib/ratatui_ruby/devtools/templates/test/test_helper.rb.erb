@@ -1,0 +1,15 @@
+# frozen_string_literal: true
+
+#--
+<%# REUSE-IgnoreStart -%>
+# SPDX-FileCopyrightText: <%= year %> <%= copyright_holder %>
+# SPDX-License-Identifier: <%= license %>
+<%# REUSE-IgnoreEnd -%>
+#++
+
+$LOAD_PATH.unshift File.expand_path("../lib", __dir__)
+require "<%= require_path %>"
+require "ratatui_ruby"
+require "<%= require_path %>/test_helper"
+require "minitest/autorun"
+require "minitest/mock"

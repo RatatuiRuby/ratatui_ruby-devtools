@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 #--
+<%# REUSE-IgnoreStart -%>
 # SPDX-FileCopyrightText: <%= Time.now.year %> <%= copyright_holder %>
-# REUSE-IgnoreStart
 # SPDX-License-Identifier: <%= license %>
-# REUSE-IgnoreEnd
+<%# REUSE-IgnoreEnd -%>
 #++
 
 require "bundler/gem_tasks"
@@ -22,8 +22,8 @@ Rake::ExtensionTask.new("<%= gem_name.tr('-', '_') %>") do |ext|
   ext.lib_dir = "lib/<%= gem_name.tr('-', '/') %>"
 end
 
-task default: %w[compile lint:fix test lint reuse]
+task default: %w[compile lint:fix install:force test lint reuse steep]
 <%- else -%>
 
-task default: %w[lint:fix test lint reuse]
+task default: %w[lint:fix install:force test lint reuse steep]
 <%- end -%>

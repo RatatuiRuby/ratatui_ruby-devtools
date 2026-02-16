@@ -1,0 +1,13 @@
+<%# REUSE-IgnoreStart -%>
+// SPDX-FileCopyrightText: <%= year %> <%= copyright_holder %>
+// SPDX-License-Identifier: <%= license %>
+<%# REUSE-IgnoreEnd -%>
+
+use magnus::{define_module, prelude::*, Error};
+
+#[magnus::init]
+fn init() -> Result<(), Error> {
+    let module = define_module("<%= module_name.split('::').first %>")?;
+    // Add your native methods here
+    Ok(())
+}

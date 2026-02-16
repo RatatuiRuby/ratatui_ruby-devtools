@@ -1,32 +1,32 @@
-<%#
+<%# REUSE-IgnoreStart -%>
+<%= "<%#" %>
 SPDX-FileCopyrightText: <%= Time.now.year %> <%= copyright_holder %>
-REUSE-IgnoreStart
 SPDX-License-Identifier: <%= license %>
-REUSE-IgnoreEnd
 %>
+<%# REUSE-IgnoreEnd -%>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title><%= page_title %> - Example Viewer</title>
+  <title><%%= page_title %> - Example Viewer</title>
   
   <script>
-  var rdoc_rel_prefix = "<%= doc_root_link.sub('index.html', '') %>";
-  var index_rel_prefix = "<%= '../' * (relative_path.split('/').size - 1) %>";
+  var rdoc_rel_prefix = "<%%= doc_root_link.sub('index.html', '') %>";
+  var index_rel_prefix = "<%%= '../' * (relative_path.split('/').size - 1) %>";
   </script>
 
-  <script src="<%= '../' * (relative_path.split('/').size - 1) %>js/search_navigation.js" defer></script>
-  <script src="<%= '../' * (relative_path.split('/').size - 1) %>js/search_data.js" defer></script>
-  <script src="<%= '../' * (relative_path.split('/').size - 1) %>js/search_ranker.js" defer></script>
-  <script src="<%= '../' * (relative_path.split('/').size - 1) %>js/search_controller.js" defer></script>
-  <script src="<%= '../' * (relative_path.split('/').size - 1) %>js/aliki.js" defer></script>
+  <script src="<%%= '../' * (relative_path.split('/').size - 1) %>js/search_navigation.js" defer></script>
+  <script src="<%%= '../' * (relative_path.split('/').size - 1) %>js/search_data.js" defer></script>
+  <script src="<%%= '../' * (relative_path.split('/').size - 1) %>js/search_ranker.js" defer></script>
+  <script src="<%%= '../' * (relative_path.split('/').size - 1) %>js/search_controller.js" defer></script>
+  <script src="<%%= '../' * (relative_path.split('/').size - 1) %>js/aliki.js" defer></script>
 
-  <link href="<%= doc_root_link.sub('index.html', '') %>css/rdoc.css" rel="stylesheet">
-  <link href="<%= doc_root_link.sub('index.html', '') %>custom.css" rel="stylesheet">
+  <link href="<%%= doc_root_link.sub('index.html', '') %>css/rdoc.css" rel="stylesheet">
+  <link href="<%%= doc_root_link.sub('index.html', '') %>custom.css" rel="stylesheet">
 </head>
-<body class="file<%= ' has-toc' unless toc_items.empty? %>">
-<%= icons_svg %>
+<body class="file<%%= ' has-toc' unless toc_items.empty? %>">
+<%%= icons_svg %>
   <header class="top-navbar">
     <div class="navbar-brand">
       Example Viewer
@@ -96,7 +96,7 @@ REUSE-IgnoreEnd
           </span>
         </summary>
         <ul class="nav-list">
-          <li><a href="<%= doc_root_link %>">← Back to Docs</a></li>
+          <li><a href="<%%= doc_root_link %>">← Back to Docs</a></li>
         </ul>
       </details>
     </div>
@@ -112,7 +112,7 @@ REUSE-IgnoreEnd
           </span>
         </summary>
         <ul class="link-list nav-list">
-          <%= render_tree(tree_data, relative_path, current_file_html) %>
+          <%%= render_tree(tree_data, relative_path, current_file_html) %>
         </ul>
       </details>
     </div>
@@ -120,24 +120,24 @@ REUSE-IgnoreEnd
 
   <main role="main">
     <div class="breadcrumb">
-      <%= breadcrumb_path %>
+      <%%= breadcrumb_path %>
     </div>
-    <%= file_header_html %>
+    <%%= file_header_html %>
     <div class="content">
-      <%= file_content_html %>
+      <%%= file_content_html %>
     </div>
   </main>
 
-  <% unless toc_items.empty? %>
+  <%% unless toc_items.empty? %>
   <aside class="table-of-contents" role="complementary" aria-label="Table of Contents">
     <div class="toc-sticky">
       <div class="toc-list">
         <h3>On This Page</h3>
-        <%= render_toc(toc_items) %>
+        <%%= render_toc(toc_items) %>
       </div>
     </div>
   </aside>
-  <% end %>
+  <%% end %>
 
 
   <script>

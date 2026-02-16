@@ -5,27 +5,60 @@
 # <%= gem_name %>
 
 [![
-builds.sr.ht status](https://builds.sr.ht/~kerrick/<%= gem_name %>.svg)](https://builds.sr.ht/~kerrick/<%= gem_name %>?) [![
-License](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fgit.sr.ht%2F~kerrick%2F<%= gem_name %>%2Fblob%2Fstable%2F<%= gem_name %>.gemspec&search=spec%5C.license%20%3D%20%22(.*)%22&replace=%241&label=License&color=a2c93e)](https://spdx.org/licenses/<%= license %>.html) [![
+CI](https://github.com/<%= github_repo %>/actions/workflows/ci.yml/badge.svg)](https://github.com/<%= github_repo %>/actions/workflows/ci.yml) [![
+License](https://img.shields.io/badge/License-<%= license %>-a2c93e)](https://spdx.org/licenses/<%= license %>.html) [![
 Gem Total Downloads](https://img.shields.io/gem/dt/<%= gem_name %>)](https://rubygems.org/gems/<%= gem_name %>) [![
 Gem Version](https://img.shields.io/gem/v/<%= gem_name %>)](https://rubygems.org/gems/<%= gem_name %>) [![
-Mailing List: Discussion](https://img.shields.io/badge/mailing_list-discussion-5865F2.svg?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0iaWNvbiBpY29uLXRhYmxlciBpY29ucy10YWJsZXItb3V0bGluZSBpY29uLXRhYmxlci1tYWlsIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMyA3YTIgMiAwIDAgMSAyIC0yaDE0YTIgMiAwIDAgMSAyIDJ2MTBhMiAyIDAgMCAxIC0yIDJoLTE0YTIgMiAwIDAgMSAtMiAtMnYtMTB6IiAvPjxwYXRoIGQ9Ik0zIDdsOSA2bDkgLTYiIC8+PC9zdmc+Cg==)](https://lists.sr.ht/~kerrick/ratatui_ruby-discuss) [![
-Mailing List: Development](https://img.shields.io/badge/mailing_list-development-4954d5.svg?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0iaWNvbiBpY29uLXRhYmxlciBpY29ucy10YWJsZXItb3V0bGluZSBpY29uLXRhYmxlci1tYWlsIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMyA3YTIgMiAwIDAgMSAyIC0yaDE0YTIgMiAwIDAgMSAyIDJ2MTBhMiAyIDAgMCAxIC0yIDJoLTE0YTIgMiAwIDAgMSAtMiAtMnYtMTB6IiAvPjxwYXRoIGQ9Ik0zIDdsOSA2bDkgLTYiIC8+PC9zdmc+Cg==)](https://lists.sr.ht/~kerrick/ratatui_ruby-devel) [![
-Mailing List: Announcements](https://img.shields.io/badge/mailing_list-announcements-3b44ac.svg?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0iaWNvbiBpY29uLXRhYmxlciBpY29ucy10YWJsZXItb3V0bGluZSBpY29uLXRhYmxlci1tYWlsIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMyA3YTIgMiAwIDAgMSAyIC0yaDE0YTIgMiAwIDAgMSAyIDJ2MTBhMiAyIDAgMCAxIC0yIDJoLTE0YTIgMiAwIDAgMSAtMiAtMnYtMTB6IiAvPjxwYXRoIGQ9Ik0zIDdsOSA2bDkgLTYiIC8+PC9zdmc+Cg==)](https://lists.sr.ht/~kerrick/ratatui_ruby-announce)
+Discussion](https://img.shields.io/badge/forum-discussion-5865F2.svg?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0iaWNvbiBpY29uLXRhYmxlciBpY29ucy10YWJsZXItb3V0bGluZSBpY29uLXRhYmxlci1tYWlsIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMyA3YTIgMiAwIDAgMSAyIC0yaDE0YTIgMiAwIDAgMSAyIDJ2MTBhMiAyIDAgMCAxIC0yIDJoLTE0YTIgMiAwIDAgMSAtMiAtMnYtMTB6IiAvPjxwYXRoIGQ9Ik0zIDdsOSA2bDkgLTYiIC8+PC9zdmc+Cg==)](https://forum.setdef.com/tags/c/<%= gem_name.tr('_', '-') %>/discussion) [![
+Bug Reports](https://img.shields.io/badge/forum-bug_reports-4954d5.svg?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0iaWNvbiBpY29uLXRhYmxlciBpY29ucy10YWJsZXItb3V0bGluZSBpY29uLXRhYmxlci1tYWlsIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMyA3YTIgMiAwIDAgMSAyIC0yaDE0YTIgMiAwIDAgMSAyIDJ2MTBhMiAyIDAgMCAxIC0yIDJoLTE0YTIgMiAwIDAgMSAtMiAtMnYtMTB6IiAvPjxwYXRoIGQ9Ik0zIDdsOSA2bDkgLTYiIC8+PC9zdmc+Cg==)](https://forum.setdef.com/tags/c/<%= gem_name.tr('_', '-') %>/bug) [![
+Announcements](https://img.shields.io/badge/forum-announcements-3b44ac.svg?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0iaWNvbiBpY29uLXRhYmxlciBpY29ucy10YWJsZXItb3V0bGluZSBpY29uLXRhYmxlci1tYWlsIj48cGF0aCBzdHJva2U9Im5vbmUiIGQ9Ik0wIDBoMjR2MjRIMHoiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMyA3YTIgMiAwIDAgMSAyIC0yaDE0YTIgMiAwIDAgMSAyIDJ2MTBhMiAyIDAgMCAxIC0yIDJoLTE0YTIgMiAwIDAgMSAtMiAtMnYtMTB6IiAvPjxwYXRoIGQ9Ik0zIDdsOSA2bDkgLTYiIC8+PC9zdmc+Cg==)](https://forum.setdef.com/tags/c/<%= gem_name.tr('_', '-') %>/announcement)
 
 
 ## Introduction
 
-**<%= gem_name %>** is a gem in the [RatatuiRuby ecosystem](https://sr.ht/~kerrick/ratatui_ruby/).
+**<%= gem_name %>** is a gem in the [RatatuiRuby ecosystem](https://www.ratatui-ruby.dev).
 **ratatui_ruby** is a community wrapper that is not affiliated with [the Ratatui team](https://github.com/orgs/ratatui/people).
 
 > [!WARNING]
 > **<%= gem_name %>** is currently in **PRE-RELEASE**. The API will change rapidly, even between minor and patch versions.
 
-**[Why RatatuiRuby?](https://man.sr.ht/~kerrick/ratatui_ruby/why.md)** — Native Rust performance, zero runtime overhead, and Ruby's expressiveness. [See how we compare](https://man.sr.ht/~kerrick/ratatui_ruby/why.md) to CharmRuby, raw Rust, and Go.
+**[Why RatatuiRuby?](https://www.ratatui-ruby.dev/docs/trunk/doc/getting_started/why_md.html)** — Native Rust performance, zero runtime overhead, and Ruby's expressiveness. [See how we compare](https://www.ratatui-ruby.dev/docs/trunk/doc/getting_started/why_md.html) to CharmRuby, raw Rust, and Go.
 
-Please join the **announce** mailing list at https://lists.sr.ht/~kerrick/ratatui_ruby-announce to stay up-to-date on new releases and announcements. See the [`trunk` branch](https://git.sr.ht/~kerrick/<%= gem_name %>/tree/trunk) for pre-release updates.
+Please follow the [announcements](https://forum.setdef.com/tags/c/<%= gem_name.tr('_', '-') %>/announcement) to stay up-to-date on new releases. See the [`trunk` branch](https://github.com/<%= github_repo %>/tree/trunk) for pre-release updates.
 
+----
+
+## Quick Links
+
+### The Ecosystem
+
+**RatatuiRuby:** [Core engine](https://www.ratatui-ruby.dev)
+• **Rooibos:** [MVU architecture](https://www.rooibos.run)
+• **Kit:** [Component architecture](https://sr.ht/~kerrick/ratatui_ruby/#chapter-3-the-object-path--kit) (Planned)
+• **DSL:** [Glimmer syntax](https://sr.ht/~kerrick/ratatui_ruby/#chapter-4-the-syntax) (Planned)
+• **Framework:** [Omakase framework](https://sr.ht/~kerrick/ratatui_ruby/#chapter-5-the-framework) (Planned)
+• **UI:** [Polished widgets](https://sr.ht/~kerrick/ratatui_ruby#chapter-6-licensing) (Planned)
+• **UI Pro:** [More polished widgets](https://sr.ht/~kerrick/ratatui_ruby#chapter-6-licensing) (Planned)
+
+### For App Developers
+
+**Get Started:** [Quickstart](https://www.ratatui-ruby.dev/docs/trunk/doc/getting_started/quickstart_md.html)
+• [Examples](https://www.ratatui-ruby.dev/docs/trunk/examples/app_all_events/README_md.html)
+⸺ **Stay Informed:** [Announcements](https://forum.setdef.com/tags/c/<%= gem_name.tr('_', '-') %>/announcement)
+• [FAQ](https://www.ratatui-ruby.dev/docs/trunk/doc/troubleshooting/index_md.html)
+⸺ **Reach Out:** [Forum](https://forum.setdef.com/c/<%= gem_name.tr('_', '-') %>)
+• [Bug Tracker](https://forum.setdef.com/tags/c/<%= gem_name.tr('_', '-') %>/bug)
+
+### For Contributors
+
+**Get Started:** [Contributing Guide](./CONTRIBUTING.md)
+• [Code of Conduct](./CODE_OF_CONDUCT.md)
+⸺ **Stay Informed:** [Announcements](https://forum.setdef.com/tags/c/<%= gem_name.tr('_', '-') %>/announcement)
+• [FAQ](https://www.ratatui-ruby.dev/docs/trunk/doc/troubleshooting/index_md.html)
+⸺ **Reach Out:** [Forum](https://forum.setdef.com/c/<%= gem_name.tr('_', '-') %>)
+• [Bug Tracker](https://forum.setdef.com/tags/c/<%= gem_name.tr('_', '-') %>/bug)
+
+----
 
 ## Compatibility
 
@@ -98,18 +131,18 @@ _Because this gem is in pre-release, it lacks documentation. Please check the so
 | [Application Architecture](./doc/concepts/application_architecture.md) | Patterns for scaling your app |
 | [Guides](./doc/index.md) | Tutorials, examples, and more |
 | API Reference | To generate full RDoc documentation, run `bundle exec rake rdoc` |
-| [Wiki](https://man.sr.ht/~kerrick/ratatui_ruby) | Learn more about the RatatuiRuby ecosystem |
+| [Ecosystem](https://www.ratatui-ruby.dev) | Learn more about the RatatuiRuby ecosystem |
 
 
 ## Contributing
 
-Bug reports and pull requests are welcome on [sourcehut](https://sourcehut.org) at https://sr.ht/~kerrick/ratatui_ruby/. This project is intended to be a safe, productive collaboration, and contributors are expected to adhere to the [Code of Conduct](https://man.sr.ht/~kerrick/ratatui_ruby/code_of_conduct.md).
+The [discussion forum](https://forum.setdef.com/tags/c/<%= gem_name.tr('_', '-') %>/discussion) is the best place to ask questions, share patches, and get feedback. Report bugs on the [bug tracker](https://forum.setdef.com/tags/c/<%= gem_name.tr('_', '-') %>/bug). All participants follow the [Code of Conduct](./CODE_OF_CONDUCT.md).
 <% if has_rust %>
 
-Issues for the underlying Rust library should be filed in their issue tracker.
+Issues for the underlying Rust library should be filed at [ratatui/ratatui](https://github.com/ratatui/ratatui).
 <% end %>
 
-Want to help develop **<%= gem_name %>**? Check out the [contribution guide on the wiki](https://man.sr.ht/~kerrick/ratatui_ruby/contributing.md).
+Want to help develop **<%= gem_name %>**? Check out the [contribution guide](./CONTRIBUTING.md).
 
 **Note**: Active development happens on the `trunk` branch. Use `trunk` if you are a contributor or want the latest cutting-edge features. `stable` is for stable releases only.
 

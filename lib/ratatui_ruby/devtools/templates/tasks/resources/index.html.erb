@@ -1,15 +1,14 @@
-<!--
+<%# REUSE-IgnoreStart -%>
+<%= "<%#" %>
 SPDX-FileCopyrightText: <%= Time.now.year %> <%= copyright_holder %>
-
-REUSE-IgnoreStart
 SPDX-License-Identifier: <%= license %>
-REUSE-IgnoreEnd
--->
+%>
+<%# REUSE-IgnoreEnd -%>
 
 <!DOCTYPE html>
 <html>
 <head>
-  <title><%= project_name %> documentation</title>
+  <title><%%= project_name %> documentation</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root { color-scheme: light dark; }
@@ -23,24 +22,24 @@ REUSE-IgnoreEnd
   </style>
 </head>
 <body>
-  <h1><%= project_name %> documentation</h1>
+  <h1><%%= project_name %> documentation</h1>
   <ul>
-    <% versions.each do |version| %>
+    <%% versions.each do |version| %>
       <li>
-        <a href='<%= version.slug %>/index.html'>
-          <%= version.name %>
-          <span class='meta'>
-            <% if version.latest? %>
+        <a href="<%%= version.slug %>/index.html">
+          <%%= version.name %>
+          <span class="meta">
+            <%% if version.latest? %>
               Latest
-            <% elsif version.edge? %>
+            <%% elsif version.edge? %>
               Edge
-            <% else %>
+            <%% else %>
               Historical
-            <% end %>
+            <%% end %>
           </span>
         </a>
       </li>
-    <% end %>
+    <%% end %>
   </ul>
 </body>
 </html>

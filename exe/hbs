@@ -2,20 +2,20 @@
 # frozen_string_literal: true
 
 #--
-# SPDX-FileCopyrightText: 2025 Kerrick Long <me@kerricklong.com>
+# SPDX-FileCopyrightText: 2026 Kerrick Long <me@kerricklong.com>
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #++
 
 ####
 # ======================================================================
-# hbs - watch SourceHut builds for current commit
+# hbs - Head Build Status: watch GitHub Actions for HEAD commit
 # ======================================================================
 #
 # SYNOPSIS
 #     bin/hbs [-N|--no-wait] [-b|--builds N] [-y|--yes] [-S|--no-say]
 #
 # DESCRIPTION
-#     Check SourceHut builds for the current HEAD commit and wait for
+#     Check GitHub Actions for the current HEAD commit and wait for
 #     them to complete. Announces result via macOS text-to-speech.
 #
 #     Fetches from origin first. If HEAD has not been pushed, prompts
@@ -28,7 +28,7 @@
 # OPTIONS
 #     -N, --no-wait      Exit 1 immediately if no builds exist for HEAD.
 #     -b, --builds N     Number of builds to watch (default: count of
-#                        .yml files in .builds/ directory).
+#                        workflows matching current branch).
 #     -y, --yes          Auto-confirm all prompts (non-interactive).
 #     -S, --no-say       Disable text-to-speech announcements.
 #
@@ -47,7 +47,7 @@
 #     bin/hbs -N
 #
 # DEPENDENCIES
-#     hut                SourceHut CLI (https://sr.ht/~xenrox/hut/)
+#     gh                 GitHub CLI (https://cli.github.com)
 #     git                To get current HEAD commit
 #     say                macOS text-to-speech
 #
@@ -55,284 +55,204 @@
 
 require "optparse"
 require "open3"
+require "json"
+require "yaml"
 require "rdoc"
 
-# Represents a git commit for build lookups.
-#
-# SourceHut builds are identified by commit SHA. Determining whether HEAD is
-# pushed and how far ahead we are requires git commands. This class wraps
-# those queries.
-#
-# [short_sha] The 7-character short SHA.
-Commit = Data.define(:short_sha) do
-  # Returns the current HEAD commit.
+# A git commit identified by its full SHA.
+class Commit < Data.define(:sha)
+  ##
+  # The first seven characters of the SHA.
+  def short_sha
+    sha[0, 7]
+  end
+
+  # Returns the commit at HEAD.
   def self.head
-    sha = `git rev-parse --short HEAD 2>/dev/null`.strip
+    sha = `git rev-parse HEAD 2>/dev/null`.strip
     raise "Not in a git repository" if sha.empty?
 
-    new(short_sha: sha)
+    new(sha:)
   end
 
-  # Returns the origin/trunk HEAD commit, or nil if not available.
+  # The upstream tracking ref, falling back to +origin/trunk+.
+  def self.upstream_ref
+    # Get the upstream tracking branch for the current branch (e.g., origin/release/1.0)
+    ref = `git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null`.strip
+    ref.empty? ? "origin/trunk" : ref # Fall back to origin/trunk if no upstream
+  end
+
+  # Returns the commit at the upstream ref, or +nil+ if unavailable.
   def self.origin_head
-    sha = `git rev-parse --short origin/trunk 2>/dev/null`.strip
+    sha = `git rev-parse #{upstream_ref} 2>/dev/null`.strip
     return nil if sha.empty?
 
-    new(short_sha: sha)
+    new(sha:)
   end
 
-  # Checks whether this commit exists on the remote.
-  #
-  # Watching builds for unpushed commits wastes time. The remote hasn't run
-  # CI for code it hasn't received. Check this before querying SourceHut.
+  # Whether this commit is an ancestor of the upstream ref.
   def pushed?
-    system("git", "merge-base", "--is-ancestor", short_sha, "origin/trunk",
+    system("git", "merge-base", "--is-ancestor", sha, self.class.upstream_ref,
       out: File::NULL, err: File::NULL)
   end
 
-  # Counts commits between local HEAD and origin.
-  #
-  # Users need to know how far ahead they are. A large number suggests pushing
-  # before watching builds. Use this to inform the user about sync status.
+  # Number of commits ahead of the upstream ref.
   def commits_ahead
-    `git rev-list --count origin/trunk..HEAD 2>/dev/null`.strip.to_i
+    `git rev-list --count #{self.class.upstream_ref}..HEAD 2>/dev/null`.strip.to_i
   end
 end
 
-# Represents a single SourceHut build job.
-#
-# Build jobs have IDs, statuses, and output logs. Querying status, fetching
-# output, and refreshing require hut CLI calls. This class wraps those.
-#
-# [id] The numeric build ID.
-# [status] The current status string (RUNNING, SUCCESS, FAILED, etc.)
-Build = Data.define(:id, :status) do
-  # Indicates whether the build is still in progress.
-  #
-  # Completed builds have final results. Running builds need polling. Check
-  # this to determine whether to wait or report.
+# A single GitHub Actions workflow run.
+class Build < Data.define(:id, :name, :status, :conclusion, :url)
+  ##
+  # Constructs a Build from a parsed GitHub API JSON hash.
+  def self.from_json(data)
+    new(
+      id: data.fetch("databaseId"),
+      name: data.fetch("workflowName"),
+      status: data.fetch("status"),
+      conclusion: data.fetch("conclusion") || "",
+      url: data.fetch("url")
+    )
+  end
+
+  # Whether this run is still in progress.
   def running?
-    %w[RUNNING PENDING QUEUED].include?(status)
+    %w[in_progress queued requested waiting pending].include?(status)
   end
 
-  # Indicates whether the build failed.
-  #
-  # A failed build blocks releases. Success requires all builds to pass. Check
-  # this to gate release actions.
+  # Whether this run completed without success.
   def failed?
-    status == "FAILED"
+    status == "completed" && conclusion != "success"
   end
 
-  # Generates the SourceHut web URL for this build.
-  #
-  # Users need direct links to investigate failures or review logs. Use this
-  # to create clickable references in output.
-  def url
-    "https://builds.sr.ht/~kerrick/job/#{id}"
-  end
-
-  # Fetches the full build output from SourceHut.
-  #
-  # Debugging failures requires log access. The hut CLI retrieves logs. Use
-  # this to display build details or extract specific information.
+  # The full text output from +gh run view+.
   def output
-    out, = Open3.capture2("hut", "builds", "show", id.to_s)
+    out, = Open3.capture2("gh", "run", "view", id.to_s)
     out
   end
 
-  # Extracts displayable log lines from build output.
-  #
-  # Build output includes headers. Display needs just the log content. Use
-  # this when showing logs in a formatted UI.
+  # Output lines with trailing whitespace stripped.
   def content_lines
-    # Skip the URL line (first line) since it becomes the title
-    output.lines.drop(1).map(&:rstrip)
+    output.lines.map(&:rstrip)
   end
 
-  # Extracts the most recent timestamp from the build log.
-  #
-  # Long-running builds need progress indication. The latest timestamp shows
-  # recency. Use this to label build sections or detect stalled jobs.
+  # The most recent +updatedAt+ timestamp from the GitHub API.
   def last_timestamp
-    # Extract the latest timestamp from the runtime log (format: YYYY/MM/DD HH:MM:SS)
-    timestamps = output.scan(%r{\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}})
-    timestamps.last
+    out, st = Open3.capture2("gh", "run", "view", id.to_s, "--json", "updatedAt", "--jq", ".updatedAt")
+    return nil unless st.success?
+    ts = out.strip
+    ts.empty? ? nil : ts
   end
 
-  # Queries SourceHut for the current build status.
-  #
-  # Build status changes over time. Stale data misleads users. Call this
-  # periodically to get fresh status and detect completion.
+  # Returns a new Build with fresh status from the API.
   def refresh
-    out, = Open3.capture2("hut", "builds", "show", id.to_s)
-    new_status = out.lines.first(3).join.match(/RUNNING|SUCCESS|FAILED|PENDING|QUEUED/)&.[](0) || status
-    Build.new(id:, status: new_status)
+    out, st = Open3.capture2("gh", "run", "view", id.to_s, "--json", "databaseId,workflowName,status,conclusion,url")
+    return self unless st.success?
+    Build.from_json(JSON.parse(out))
   end
 end
 
-# A collection of SourceHut builds.
-#
-# Watching builds requires finding them by commit, checking statuses, and
-# refreshing as a group. Individual Build objects lack this context.
-#
-# This class manages collections. It queries builds by commit or status.
-# It refreshes all builds together. It reports aggregate status.
-#
-# [builds] Array of Build objects.
-BuildSet = Data.define(:builds) do
-  # Finds builds for a specific commit.
-  #
-  # [commit] A Commit object to search for.
+# A collection of GitHub Actions workflow runs.
+class BuildSet < Data.define(:builds)
+  ##
+  # Queries runs for a specific commit.
   def self.for_commit(commit)
-    output, = Open3.capture2("hut", "builds", "list")
-    ids = output.lines
-      .each_cons(6)
-      .select { |chunk| chunk.any? { |l| l.include?(commit.short_sha) } }
-      .filter_map { |chunk| chunk.first[/#(\d+)/, 1]&.to_i }
-      .uniq
+    out, status = Open3.capture2(
+      "gh", "run", "list",
+      "--commit", commit.sha,
+      "--json", "databaseId,workflowName,status,conclusion,url",
+      "--limit", "20"
+    )
+    return new(builds: []) unless status.success?
 
-    builds = ids.map { |id| Build.new(id:, status: fetch_status(id)) }
-    new(builds:)
+    data = JSON.parse(out)
+    new(builds: data.map { |d| Build.from_json(d) })
   end
 
-  # Finds currently running builds.
-  def self.running
-    output, = Open3.capture2("hut", "builds", "list")
-    ids = output.lines
-      .select { |l| l.match?(/RUNNING|PENDING|QUEUED/) }
-      .filter_map { |l| l[/#(\d+)/, 1]&.to_i }
-      .uniq
+  # Returns the most recent runs.
+  def self.latest(count = 12)
+    out, status = Open3.capture2(
+      "gh", "run", "list",
+      "--json", "databaseId,workflowName,status,conclusion,url",
+      "--limit", count.to_s
+    )
+    return new(builds: []) unless status.success?
 
-    builds = ids.map { |id| Build.new(id:, status: fetch_status(id)) }
-    new(builds:)
+    data = JSON.parse(out)
+    new(builds: data.map { |d| Build.from_json(d) })
   end
 
-  # Finds the most recent builds.
-  #
-  # [count] Number of builds to return.
-  def self.latest(count = 4)
-    output, = Open3.capture2("hut", "builds", "list")
-    ids = output.lines
-      .filter_map { |l| l[/#(\d+)/, 1]&.to_i }
-      .uniq
-      .first(count)
-
-    builds = ids.map { |id| Build.new(id:, status: fetch_status(id)) }
-    new(builds:)
-  end
-
-  # Finds builds with a specific status.
-  #
-  # [target_status] The status to search for (FAILED, SUCCESS).
-  # [count] Number of builds per set.
+  # Finds the first batch of runs matching +target_status+.
   def self.with_status(target_status, count = 4)
-    output, = Open3.capture2("hut", "builds", "list")
-    all_ids = output.lines
-      .filter_map { |l| l[/#(\d+)/, 1]&.to_i }
-      .uniq
+    out, status = Open3.capture2(
+      "gh", "run", "list",
+      "--json", "databaseId,workflowName,status,conclusion,url",
+      "--limit", "50"
+    )
+    return new(builds: []) unless status.success?
+
+    all = JSON.parse(out).map { |d| Build.from_json(d) }
 
     # Group builds into sets of `count` and find the first set with any matching status
-    all_ids.each_slice(count) do |set_ids|
-      builds = set_ids.map { |id| Build.new(id:, status: fetch_status(id)) }
+    all.each_slice(count) do |set_builds|
       has_match = case target_status
-                  when "FAILED" then builds.any?(&:failed?)
-                  when "SUCCESS" then builds.none?(&:failed?)
+                  when "FAILED" then set_builds.any?(&:failed?)
+                  when "SUCCESS" then set_builds.none?(&:failed?)
       end
-      return new(builds:) if has_match
+      return new(builds: set_builds) if has_match
     end
 
     new(builds: [])
   end
 
-  # Queries the status of a specific build by ID.
-  #
-  # Build creation returns only the ID. Status requires a separate query. Use
-  # this when constructing Build objects from ID lists.
-  #
-  # [id] The build ID.
-  def self.fetch_status(id)
-    output, = Open3.capture2("hut", "builds", "show", id.to_s)
-    output.lines.first(3).join.match(/RUNNING|SUCCESS|FAILED|PENDING|QUEUED/)&.[](0) || "UNKNOWN"
-  end
-
-  # Indicates whether the collection has no builds.
-  #
-  # A missing commit has no builds. Watching nothing wastes time. Check this
-  # to abort early or prompt the user about missing CI.
+  # Whether or not any builds were found.
   def empty?
     builds.empty?
   end
 
-  # Indicates whether any build is still in progress.
-  #
-  # Completed builds have final results. Running builds need polling. Check
-  # this to determine whether to wait or report.
+  # Whether any build is still in progress.
   def any_running?
     builds.any?(&:running?)
   end
 
-  # Indicates whether any build failed.
-  #
-  # A failed build blocks releases. Success requires all builds to pass. Check
-  # this to gate release actions.
+  # Whether any build has failed.
   def any_failed?
     builds.any?(&:failed?)
   end
 
-  # Extracts the commit SHA from build output.
-  #
-  # Builds track which commit they ran. Displaying the SHA confirms the correct
-  # code was tested. Use this to show the user what was verified.
+  # The short SHA from the first build in the set.
   def commit_sha
-    # Extract commit SHA from the first build's output - this is the canonical source
+    # Extract commit SHA from the first build - this is the canonical source
     return nil if builds.empty?
 
-    sha_match = builds.first.output.match(/\[([a-f0-9]{7})\]\[0\]/)
-    sha_match&.[](1)
+    out, st = Open3.capture2("gh", "run", "view", builds.first.id.to_s, "--json", "headSha", "--jq", ".headSha")
+    return nil unless st.success?
+    sha = out.strip
+    sha.empty? ? nil : sha[0, 7]
   end
 
-  # Queries SourceHut for fresh status of all builds.
-  #
-  # Build status changes over time. Watching requires periodic updates. Call
-  # this in a loop to poll until all builds complete.
+  # Returns a new BuildSet with refreshed status for all builds.
   def refresh
     BuildSet.new(builds: builds.map(&:refresh))
   end
 
-  # Collects the build IDs for display.
-  #
-  # Users need to identify which builds are being watched. IDs enable lookup
-  # and linking. Use this when showing build references.
+  # The build IDs in this set.
   def ids
     builds.map(&:id)
   end
 end
 
-# Watches SourceHut builds and reports results.
-#
-# CI builds run asynchronously. Developers need to know when they finish and
-# whether they passed. Polling manually is tedious. Parsing output is error-prone.
-#
-# This class watches builds. It polls until complete. It announces results via
-# macOS text-to-speech. It displays formatted output with clear pass/fail status.
-#
-# Use it to wait for CI before releasing.
+# Watches GitHub Actions builds and reports results via terminal UI.
 class BuildWatch
   # Seconds between status polls.
   POLL_INTERVAL = 30
-
   # Seconds to wait for builds to appear.
   WAIT_INTERVAL = 5
-
   # Maximum attempts to find builds before giving up.
   MAX_WAIT_ATTEMPTS = 6
 
-  # Creates a new BuildWatch.
-  #
-  # [wait_for_builds] Whether to wait for builds to appear.
-  # [build_count] Number of builds to expect.
-  # [auto_yes] Whether to auto-confirm prompts.
-  # [no_say] Whether to disable text-to-speech.
+  # Configures the watcher with polling and display preferences.
   def initialize(wait_for_builds: true, build_count: 4, auto_yes: false, no_say: false)
     @wait_for_builds = wait_for_builds
     @build_count = build_count
@@ -453,7 +373,7 @@ class BuildWatch
           puts block_line
           puts
         end
-        system("hut", "builds", "show", build.id.to_s)
+        system("gh", "run", "view", build.id.to_s)
       end
     else
       # Normal builds: gray single-boxes with URL titles
@@ -463,11 +383,7 @@ class BuildWatch
     end
   end
 
-  # Starts the build watching TUI.
-  #
-  # Users invoke hbs to monitor CI. This method checks prerequisites, resolves
-  # target commit, queries builds, and polls until completion. It reports
-  # results with terminal notifications.
+  # Entry point: fetches builds for HEAD, watches until complete, reports.
   def run
     check_dependencies!
 
@@ -516,11 +432,16 @@ class BuildWatch
   end
 
   private def check_dependencies!
-    %w[hut say].each do |cmd|
+    %w[gh say].each do |cmd|
       unless system("command", "-v", cmd, out: File::NULL, err: File::NULL)
         warn "Error: '#{cmd}' not found."
         exit 1
       end
+    end
+
+    unless system("gh", "auth", "status", out: File::NULL, err: File::NULL)
+      warn "Error: 'gh' is not authenticated. Run: gh auth login"
+      exit 1
     end
   end
 
@@ -552,7 +473,7 @@ class BuildWatch
     )
 
     unless @auto_yes
-      print "Watch latest SourceHut builds anyway? [Y/n] "
+      print "Watch latest GitHub Actions builds anyway? [Y/n] "
       reply = $stdin.gets&.strip || ""
       if reply.downcase.start_with?("n")
         puts
@@ -566,7 +487,7 @@ class BuildWatch
     if build_set.empty?
       puts
       say("No builds found")
-      box("✗✗✗ NO BUILDS ON SOURCEHUT ✗✗✗", style: :error)
+      box("✗✗✗ NO BUILDS ON GITHUB ✗✗✗", style: :error)
       exit 1
     end
 
@@ -608,6 +529,7 @@ class BuildWatch
     end
   end
 
+  # Displays final build results and exits with the appropriate status.
   private def report(build_set)
     puts
     show_builds(build_set)
@@ -627,6 +549,7 @@ class BuildWatch
     end
   end
 
+  # Announces a message via macOS text-to-speech (async, non-blocking).
   private def say(message)
     return if @no_say
 
@@ -636,8 +559,25 @@ class BuildWatch
   end
 end
 
-# Parse options
-default_build_count = Dir.glob(".builds/*.yml").size
+# Count workflows that would trigger for the current branch
+default_build_count = begin
+  branch = `git branch --show-current 2>/dev/null`.strip
+  Dir.glob(".github/workflows/*.yml").count do |f|
+    on = YAML.safe_load_file(f).dig("on", "push") || {}
+    branches = on["branches"]
+    ignores = on["branches-ignore"]
+
+    if branches
+      branches.any? { |pattern| File.fnmatch(pattern, branch) }
+    elsif ignores
+      ignores.none? { |pattern| File.fnmatch(pattern, branch) }
+    else
+      true # No branch filter means all branches
+    end
+  end
+rescue
+  0
+end
 default_build_count = 4 if default_build_count.zero?
 
 options = { wait_for_builds: true, build_count: default_build_count, auto_yes: false, no_say: false }

@@ -1,0 +1,9 @@
+<%# REUSE-IgnoreStart -%>
+# SPDX-FileCopyrightText: <%= year %> <%= copyright_holder %>
+# SPDX-License-Identifier: <%= license %>
+<%# REUSE-IgnoreEnd -%>
+
+disallowed-methods = [
+    { path = "std::boxed::Box::leak", reason = "Use bumpalo arena allocation instead." },
+    { path = "std::vec::Vec::leak", reason = "Use bumpalo arena allocation instead." },
+]

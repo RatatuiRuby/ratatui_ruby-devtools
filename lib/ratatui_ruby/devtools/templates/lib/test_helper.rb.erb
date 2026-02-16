@@ -1,0 +1,26 @@
+# frozen_string_literal: true
+
+#--
+<%# REUSE-IgnoreStart -%>
+# SPDX-FileCopyrightText: <%= year %> <%= copyright_holder %>
+# SPDX-License-Identifier: <%= license %>
+<%# REUSE-IgnoreEnd -%>
+#++
+
+require "ratatui_ruby/test_helper"
+
+module <%= module_name %>
+  # Test assertions and utilities for <%= gem_name %>.
+  #
+  # Includes {RatatuiRuby::TestHelper} for terminal test helpers
+  # (<tt>with_test_terminal</tt>, <tt>inject_key</tt>, etc.).
+  #
+  # Include this module in your Minitest classes:
+  #
+  #   class TestMyApp < Minitest::Test
+  #     include <%= module_name %>::TestHelper
+  #   end
+  module TestHelper
+    include RatatuiRuby::TestHelper
+  end
+end

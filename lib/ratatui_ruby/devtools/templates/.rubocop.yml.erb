@@ -1,8 +1,10 @@
-# SPDX-FileCopyrightText: 2026 Kerrick Long <me@kerricklong.com>
-# SPDX-License-Identifier: AGPL-3.0-or-later
+<%# REUSE-IgnoreStart -%>
+# SPDX-FileCopyrightText: <%= Time.now.year %> <%= copyright_holder %>
+# SPDX-License-Identifier: <%= license %>
+<%# REUSE-IgnoreEnd -%>
 
-inherit_from:
-  - ./vendor/goodcop/base.yml
+inherit_gem:
+  <%= gem_name %>: lib/<%= require_path %>/rubocop.yml
 
 AllCops:
   TargetRubyVersion: "3.2"
