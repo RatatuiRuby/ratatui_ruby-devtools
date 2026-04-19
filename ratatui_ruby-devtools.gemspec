@@ -17,7 +17,7 @@ Gem::Specification.new do |spec|
   spec.description = "Shared Rake tasks, linters, and build tooling for RatatuiRuby ecosystem gems."
   spec.homepage = "https://sr.ht/~kerrick/ratatui_ruby/"
   spec.license = "AGPL-3.0-or-later"
-  spec.required_ruby_version = ">= 3.2.0"
+  spec.required_ruby_version = ">= 3.3.11"
 
   spec.metadata["allowed_push_host"] = "https://rubygems.org"
   spec.metadata["homepage_uri"] = spec.homepage

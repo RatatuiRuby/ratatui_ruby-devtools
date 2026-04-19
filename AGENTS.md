@@ -35,7 +35,7 @@ This gem provides Rake tasks, linters, license enforcement, version bumping, and
 
 ### Ruby Standards
 
-- Use `Data.define` for all value objects (Ruby 3.2+).
+- Use `Data.define` for all value objects (Ruby 3.3+).
 - Define types in `.rbs` files. Don't use `untyped` just because it's easy; be comprehensive and accurate.
 - Every public Ruby class/method must be documented for humans in RDoc.
 
